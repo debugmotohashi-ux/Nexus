@@ -346,8 +346,24 @@ function PromptBridge({ kind, opp }) {
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [skills, setSkills] = useState([]);
+  const [selectedSkillId, setSelectedSkillId] = useState('');
 
-  const generate = () => { setPrompt(buildPrompt(kind, opp)); setSaved(false); };
+  useEffect(() => {
+    sb.from('skills').select('id,name,prompt_template,usage_count').eq('user_id', user.id).order('usage_count', { ascending: false })
+      .then(({ data }) => setSkills(data||[]));
+  }, []);
+
+  const generate = () => {
+    const sk = skills.find(s => s.id === selectedSkillId);
+    const base = buildPrompt(kind, opp);
+    const tpl = sk?.prompt_template ? `
+
+## Skillテンプレート（${sk.name}）
+${sk.prompt_template}` : '';
+    setPrompt(base + tpl);
+    setSaved(false);
+  };
   const copy = async () => {
     try { await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(()=>setCopied(false),1500); } catch(e){}
   };
@@ -355,11 +371,34 @@ function PromptBridge({ kind, opp }) {
     if (!reply.trim()) return;
     setSaving(true);
     await sb.from('prompt_runs').insert({ user_id: user.id, opportunity_id: opp.id, kind, prompt_text: prompt, ai_response: reply });
+    if (selectedSkillId) {
+      const sk = skills.find(s => s.id === selectedSkillId);
+      if (sk) {
+        await sb.from('skills').update({ usage_count: (sk.usage_count||0)+1, last_used_at: new Date().toISOString().split('T')[0] })
+          .eq('id', selectedSkillId).eq('user_id', user.id);
+      }
+    }
     setSaving(false); setSaved(true);
   };
 
   return (
     <div className="space-y-4">
+      {skills.length > 0 && (
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+          <label className="mb-1.5 block text-xs font-medium text-indigo-700">使用するSkill（任意）</label>
+          <select value={selectedSkillId} onChange={e=>setSelectedSkillId(e.target.value)}
+            className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <option value="">選択しない</option>
+            {skills.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          {selectedSkillId && skills.find(s=>s.id===selectedSkillId)?.prompt_template && (
+            <p className="mt-1.5 text-xs text-indigo-600">✓ テンプレートをプロンプトに追加します。保存時に使用回数も更新します。</p>
+          )}
+          {selectedSkillId && !skills.find(s=>s.id===selectedSkillId)?.prompt_template && (
+            <p className="mt-1.5 text-xs text-indigo-500">保存時にこのSkillの使用回数を更新します。</p>
+          )}
+        </div>
+      )}
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
           <span className="text-sm font-medium text-slate-700">1. プロンプト生成</span>
@@ -384,7 +423,7 @@ function PromptBridge({ kind, opp }) {
           placeholder="Claudeで生成した回答をここに貼り付けます"
           className={cn(inputCls,'resize-y')} rows={6}/>
         <div className="mt-2 flex items-center justify-end gap-3">
-          {saved && <span className="text-xs text-emerald-600">保存しました</span>}
+          {saved && <span className="text-xs text-emerald-600">保存しました{selectedSkillId?' / Skill使用回数を更新しました':''}</span>}
           <Btn size="sm" disabled={!reply.trim()||saving} onClick={save}>
             <SaveIcon size={14}/> {saving ? '保存中…' : '保存'}
           </Btn>
@@ -821,12 +860,72 @@ function OppDetailScreen({ id }) {
   );
 }
 
-// ─── SKILL FORM ───────────────────────────────────────────
-const SKILL_DEFAULTS = { name:'', category:'deliverable', purpose:'', output_format:'', usage_count:0, last_used_at:'', notes:'', reusable_internally:false };
+// ─── SKILL FORM & CATEGORY MANAGER ───────────────────────
+const SKILL_DEFAULTS = { name:'', category:'', scope:'common', purpose:'', output_format:'', prompt_template:'', notes:'', reusable_internally:true };
+const SEED_CATEGORIES = [
+  { name:'分析', tone:'indigo', sort_order:0 },
+  { name:'提案', tone:'indigo', sort_order:1 },
+  { name:'成果物', tone:'emerald', sort_order:2 },
+  { name:'連絡', tone:'slate', sort_order:3 },
+  { name:'社内業務', tone:'amber', sort_order:4 },
+];
+const SCOPE_LABEL = { common:'共通', work_only:'本業専用', freelance_only:'副業専用' };
+const SCOPE_TONE  = { common:'slate', work_only:'indigo', freelance_only:'emerald' };
 
-function SkillForm({ initial, onClose, onSaved }) {
+function SkillCategoryManager({ onClose }) {
   const { sb, user } = useApp();
-  const [f, setF] = useState(initial ? { ...initial, last_used_at: initial.last_used_at||'' } : { ...SKILL_DEFAULTS });
+  const [cats, setCats] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [newName, setNewName] = useState('');
+  const [newTone, setNewTone] = useState('slate');
+
+  const load = async () => {
+    const { data } = await sb.from('skill_categories').select('*').eq('user_id', user.id).order('sort_order');
+    setCats(data||[]); setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const add = async () => {
+    if (!newName.trim()) return;
+    await sb.from('skill_categories').insert({ user_id: user.id, name: newName.trim(), tone: newTone, sort_order: cats.length });
+    setNewName(''); load();
+  };
+  const del = async (id) => {
+    if (!confirm('このカテゴリを削除しますか？（Skillには影響しません）')) return;
+    await sb.from('skill_categories').delete().eq('id', id).eq('user_id', user.id);
+    load();
+  };
+
+  return (
+    <FullModal title="カテゴリ管理" onClose={onClose}>
+      {loading ? <LoadingState/> : (
+        <>
+          <div className="space-y-2">
+            {cats.map(c => (
+              <div key={c.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                <Badge tone={c.tone}>{c.name}</Badge>
+                <span className="flex-1"/>
+                <button onClick={()=>del(c.id)} className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-500"><TrashIcon size={14}/></button>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <p className="text-xs font-semibold text-slate-600">カテゴリを追加</p>
+            <Inp placeholder="カテゴリ名" value={newName} onChange={e=>setNewName(e.target.value)}/>
+            <Sel value={newTone} onChange={e=>setNewTone(e.target.value)} label="色">
+              {Object.keys(TONE_BADGE).map(k=><option key={k} value={k}>{k}</option>)}
+            </Sel>
+            <Btn variant="secondary" onClick={add} disabled={!newName.trim()}>追加</Btn>
+          </div>
+        </>
+      )}
+    </FullModal>
+  );
+}
+
+function SkillForm({ initial, categories, onClose, onSaved }) {
+  const { sb, user } = useApp();
+  const [f, setF] = useState(initial ? { ...initial, prompt_template: initial.prompt_template||'', scope: initial.scope||'common' } : { ...SKILL_DEFAULTS });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const upd = k => e => setF(v => ({ ...v, [k]: e.target.value }));
@@ -834,12 +933,13 @@ function SkillForm({ initial, onClose, onSaved }) {
   const save = async () => {
     if (!f.name.trim()) { setErr('Skill名を入力してください'); return; }
     setSaving(true);
-    const payload = { ...f, user_id: user.id, usage_count: parseInt(f.usage_count)||0, last_used_at: f.last_used_at||null };
+    const { id, created_at, updated_at, ...rest } = f;
+    const payload = { ...rest, user_id: user.id };
     let error;
     if (f.id) {
       ({ error } = await sb.from('skills').update(payload).eq('id', f.id).eq('user_id', user.id));
     } else {
-      ({ error } = await sb.from('skills').insert(payload));
+      ({ error } = await sb.from('skills').insert({ ...payload, usage_count: 0, last_used_at: null }));
     }
     setSaving(false);
     if (error) { setErr(error.message); return; }
@@ -851,12 +951,17 @@ function SkillForm({ initial, onClose, onSaved }) {
       {err && <ErrState error={err}/>}
       <Inp label="Skill名" required value={f.name} onChange={upd('name')} placeholder="案件分析・提案文作成 など"/>
       <Sel label="カテゴリ" value={f.category} onChange={upd('category')}>
-        {Object.entries(SKILL_CATEGORY_META).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+        <option value="">未設定</option>
+        {categories.map(c=><option key={c.id||c.name} value={c.name}>{c.name}</option>)}
+      </Sel>
+      <Sel label="利用範囲" value={f.scope||'common'} onChange={upd('scope')}>
+        <option value="common">共通（本業・副業どちらでも）</option>
+        <option value="work_only">本業専用</option>
+        <option value="freelance_only">副業専用</option>
       </Sel>
       <Txta label="用途・目的" rows={3} value={f.purpose} onChange={upd('purpose')} placeholder="このSkillで何をするか"/>
       <Txta label="出力フォーマット" rows={2} value={f.output_format} onChange={upd('output_format')} placeholder="提案文（コピペ用） / 議事録（箇条書き） など"/>
-      <Inp label="使用回数" type="number" min="0" value={f.usage_count} onChange={upd('usage_count')}/>
-      <Inp label="最終使用日" type="date" value={f.last_used_at} onChange={upd('last_used_at')}/>
+      <Txta label="プロンプトテンプレート" rows={6} value={f.prompt_template} onChange={upd('prompt_template')} placeholder="このSkillで使う定型プロンプト。案件詳細のAIブリッジで自動追加されます"/>
       <Txta label="メモ・コツ" rows={3} value={f.notes} onChange={upd('notes')}/>
       <div className="flex items-center gap-3">
         <input type="checkbox" id="ri" checked={!!f.reusable_internally} onChange={e=>setF(v=>({...v,reusable_internally:e.target.checked}))} className="h-4 w-4 rounded border-slate-300 text-indigo-600"/>
@@ -870,15 +975,28 @@ function SkillForm({ initial, onClose, onSaved }) {
 function SkillsScreen() {
   const { sb, user } = useApp();
   const [skills, setSkills] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [showCatMgr, setShowCatMgr] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await sb.from('skills').select('*').eq('user_id', user.id).order('usage_count', { ascending: false });
-    if (error) setErr(error.message); else setSkills(data||[]);
+    const [{ data: s, error }, { data: c }] = await Promise.all([
+      sb.from('skills').select('*').eq('user_id', user.id).order('usage_count', { ascending: false }),
+      sb.from('skill_categories').select('*').eq('user_id', user.id).order('sort_order'),
+    ]);
+    if (error) setErr(error.message);
+    setSkills(s||[]);
+    let cats = c||[];
+    if (cats.length === 0) {
+      const toInsert = SEED_CATEGORIES.map(d=>({ ...d, user_id: user.id }));
+      const { data: seeded } = await sb.from('skill_categories').insert(toInsert).select();
+      cats = seeded || SEED_CATEGORIES;
+    }
+    setCategories(cats);
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -888,35 +1006,54 @@ function SkillsScreen() {
     await sb.from('skills').delete().eq('id', id).eq('user_id', user.id);
     load();
   };
+  const duplicate = async (sk) => {
+    const { id, created_at, updated_at, ...rest } = sk;
+    await sb.from('skills').insert({ ...rest, name: sk.name+' (コピー)', usage_count: 0, last_used_at: null });
+    load();
+  };
+  const recordUsage = async (sk) => {
+    await sb.from('skills').update({ usage_count: (sk.usage_count||0)+1, last_used_at: new Date().toISOString().split('T')[0] }).eq('id', sk.id).eq('user_id', user.id);
+    load();
+  };
+  const getCat = (name) => categories.find(c=>c.name===name) || { name: name||'未設定', tone:'slate' };
 
   if (loading) return <LoadingState/>;
   return (
     <>
       <PageHeader title="Skill" subtitle={`${skills.length}件 / 社内転用 ${skills.filter(s=>s.reusable_internally).length}件`}
-        action={<Btn size="sm" onClick={()=>{setEditing(null);setShowForm(true);}}><PlusIcon size={14}/> 追加</Btn>}/>
+        action={
+          <div className="flex gap-2">
+            <Btn variant="outline" size="sm" onClick={()=>setShowCatMgr(true)}>カテゴリ</Btn>
+            <Btn size="sm" onClick={()=>{setEditing(null);setShowForm(true);}}><PlusIcon size={14}/> 追加</Btn>
+          </div>
+        }/>
       {err && <ErrState error={err}/>}
       {skills.length === 0
         ? <EmptyState message="まだSkillがありません" action={<Btn size="sm" variant="secondary" onClick={()=>setShowForm(true)}>最初のSkillを登録</Btn>}/>
         : (
           <div className="grid gap-3 sm:grid-cols-2">
             {skills.map(sk => {
-              const cat = SKILL_CATEGORY_META[sk.category] || { label: sk.category, tone: 'slate' };
+              const cat = getCat(sk.category);
               return (
                 <div key={sk.id} className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col gap-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex flex-wrap gap-1.5">
-                      <Badge tone={cat.tone}>{cat.label}</Badge>
-                      {sk.reusable_internally && <Badge tone="amber"><Repeat2Icon size={11} className="mr-0.5"/>社内転用</Badge>}
+                      <Badge tone={cat.tone}>{cat.name}</Badge>
+                      <Badge tone={SCOPE_TONE[sk.scope]||'slate'}>{SCOPE_LABEL[sk.scope]||'共通'}</Badge>
+                      {sk.reusable_internally && <Badge tone="amber"><Repeat2Icon size={11} className="mr-0.5"/>社内</Badge>}
                     </div>
                     <div className="flex gap-1 shrink-0">
+                      <button onClick={()=>recordUsage(sk)} title="使用を記録（✓）" className="rounded p-1 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600"><CheckIcon size={14}/></button>
+                      <button onClick={()=>duplicate(sk)} title="複製" className="rounded p-1 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Repeat2Icon size={14}/></button>
                       <button onClick={()=>{setEditing(sk);setShowForm(true);}} className="rounded p-1 text-slate-400 hover:bg-slate-100"><EditIcon size={14}/></button>
                       <button onClick={()=>del(sk.id)} className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-500"><TrashIcon size={14}/></button>
                     </div>
                   </div>
                   <div className="text-sm font-semibold text-slate-900">{sk.name}</div>
                   {sk.purpose && <p className="line-clamp-2 text-xs text-slate-500">{sk.purpose}</p>}
+                  {sk.prompt_template && <p className="rounded bg-indigo-50 px-2 py-1 text-xs text-indigo-600">📋 テンプレートあり</p>}
                   <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-2.5 text-xs text-slate-400">
-                    <span>使用 <span className="font-mono font-semibold text-slate-600">{sk.usage_count}</span>回</span>
+                    <span>使用 <span className="font-mono font-semibold text-slate-600">{sk.usage_count||0}</span>回</span>
                     <span className="font-mono">最終 {fmtDate(sk.last_used_at)}</span>
                   </div>
                 </div>
@@ -924,7 +1061,8 @@ function SkillsScreen() {
             })}
           </div>
         )}
-      {showForm && <SkillForm initial={editing} onClose={()=>setShowForm(false)} onSaved={()=>{setShowForm(false);load();}}/>}
+      {showForm && <SkillForm initial={editing} categories={categories} onClose={()=>setShowForm(false)} onSaved={()=>{setShowForm(false);load();}}/>}
+      {showCatMgr && <SkillCategoryManager onClose={()=>{setShowCatMgr(false);load();}}/>}
     </>
   );
 }
