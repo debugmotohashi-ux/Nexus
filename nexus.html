@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>Nexus</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { overscroll-behavior: none; -webkit-overflow-scrolling: touch; }
+    .safe-pb { padding-bottom: env(safe-area-inset-bottom, 8px); }
+    .safe-pt { padding-top: env(safe-area-inset-top, 0px); }
+    textarea, input, select { font-size: 16px !important; } /* iOS zoom 防止 */
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+<div id="root"></div>
+<script type="text/babel">
+const {
+  useState, useEffect, useCallback, useMemo,
+  createContext, useContext, useRef
+} = React;
+
+// ─── CONSTANTS ────────────────────────────────────────────
+const STATUS_META = {
+  candidate:         { label: '候補',     tone: 'slate' },
+  analyzing:         { label: '分析待ち', tone: 'slate' },
+  considering:       { label: '応募検討', tone: 'slate' },
+  to_apply:          { label: '応募予定', tone: 'indigo' },
+  applied:           { label: '応募済み', tone: 'indigo' },
+  awaiting_reply:    { label: '返信待ち', tone: 'indigo' },
+  won:               { label: '受注',     tone: 'emerald' },
+  in_progress:       { label: '作成中',   tone: 'indigo' },
+  awaiting_delivery: { label: '納品待ち', tone: 'amber' },
+  delivered:         { label: '納品済み', tone: 'emerald' },
+  revision:          { label: '修正依頼', tone: 'amber' },
+  done:              { label: '完了',     tone: 'emerald' },
+  declined:          { label: '見送り',   tone: 'slate' },
+  lost:              { label: '失注',     tone: 'rose' },
+};
+const SOURCE_META = {
+  crowdworks: { label: 'クラウドワークス', short: 'CW' },
+  lancers:    { label: 'ランサーズ',       short: 'LA' },
+  coconala:   { label: 'ココナラ',         short: 'CO' },
+  x:          { label: 'X',               short: 'X' },
+  linkedin:   { label: 'LinkedIn',        short: 'in' },
+  referral:   { label: '知人紹介',         short: '紹介' },
+  direct:     { label: '直接依頼',         short: '直' },
+  other:      { label: 'その他',           short: '他' },
+};
+const SKILL_CATEGORY_META = {
+  analysis:      { label: '分析',     tone: 'indigo' },
+  proposal:      { label: '提案',     tone: 'indigo' },
+  deliverable:   { label: '成果物',   tone: 'emerald' },
+  communication: { label: '連絡',     tone: 'slate' },
+  internal:      { label: '社内業務', tone: 'amber' },
+};
+const KNOWLEDGE_CATEGORIES = ['general','workflow','skill_memo','client','market','template','other'];
+const KNOWLEDGE_CATEGORY_LABELS = {
+  general:'一般', workflow:'業務フロー', skill_memo:'Skillメモ',
+  client:'クライアント', market:'市場/競合', template:'テンプレ', other:'その他'
+};
+const TONE_BADGE = {
+  slate:   'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200',
+  indigo:  'bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200',
+  amber:   'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200',
+  emerald: 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200',
+  rose:    'bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200',
+};
+const TONE_RAIL = {
+  slate:   'before:bg-slate-300',
+  indigo:  'before:bg-indigo-500',
+  amber:   'before:bg-amber-400',
+  emerald: 'before:bg-emerald-500',
+  rose:    'before:bg-rose-400',
+};
+const STATUS_GROUPS = [
+  { key: 'all',      label: 'すべて',     statuses: null },
+  { key: 'pipeline', label: '検討・応募', statuses: ['candidate','analyzing','considering','to_apply','applied','awaiting_reply'] },
+  { key: 'active',   label: '進行中',     statuses: ['won','in_progress','awaiting_delivery','revision'] },
+  { key: 'closed',   label: '完了・終了', statuses: ['delivered','done','declined','lost'] },
+];
+const BRIDGE_KIND_LABELS = {
+  analysis:'案件分析', proposal:'提案文', deliverable:'成果物', delivery:'納品文', revision:'修正対応'
+};
+
+// ─── UTILITIES ────────────────────────────────────────────
+function cn(...args) { return args.filter(Boolean).join(' '); }
+function fmtYen(n) { return '¥' + (n || 0).toLocaleString('ja-JP'); }
+function fmtYenMan(n) {
+  if (n >= 10000) { const m = n/10000; return (Number.isInteger(m) ? m : m.toFixed(1)) + '万円'; }
+  return fmtYen(n);
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return `${d.getMonth()+1}/${d.getDate()}`;
+}
+function fmtDateFull(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`;
+}
+function fmtHours(min) {
+  const h = min / 60;
+  return (Number.isInteger(h) ? h : h.toFixed(1)) + 'h';
+}
+function daysUntil(iso) {
+  if (!iso) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(iso); d.setHours(0,0,0,0);
+  return Math.round((d - today) / 86400000);
+}
+function deadlineLabel(iso) {
+  const d = daysUntil(iso);
+  if (d === null) return '納期未定';
+  if (d < 0) return `${Math.abs(d)}日超過`;
+  if (d === 0) return '本日締切';
+  return `あと${d}日`;
+}
+
+// ─── ICONS (inline SVG) ────────────────────────────────────
+const SvgIcon = ({d, d2, d3, size=16, className='', viewBox='0 0 24 24'}) => (
+  <svg width={size} height={size} viewBox={viewBox} fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+    strokeLinejoin="round" className={className}>
+    {d && <path d={d}/>}
+    {d2 && <path d={d2}/>}
+    {d3 && <path d={d3}/>}
+  </svg>
+);
+const HomeIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" d2="M9 22V12h6v10"/>;
+const BriefcaseIcon = ({size, className}) => (
+  <svg width={size||16} height={size||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+  </svg>
+);
+const SparklesIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M12 3l1.9 5.8 5.6.3-4.3 3.5 1.5 5.7L12 15.4l-4.7 2.9 1.5-5.7L4.5 9.1l5.6-.3z"/>;
+const BookOpenIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" d2="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>;
+const BarChartIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M12 20V10M18 20V4M6 20v-4"/>;
+const CalendarIcon = ({size, className}) => (
+  <svg width={size||16} height={size||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+    <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+    <line x1="3" y1="10" x2="21" y2="10"/>
+  </svg>
+);
+const SettingsIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"
+  d2="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>;
+const PlusIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M12 5v14M5 12h14"/>;
+const ArrowLeftIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M19 12H5M12 19l-7-7 7-7"/>;
+const ChevronRightIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M9 18l6-6-6-6"/>;
+const EditIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+  d2="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>;
+const TrashIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>;
+const CopyIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M8 17.929H6c-1.105 0-2-.912-2-2.036V5.036C4 3.91 4.895 3 6 3h8c1.105 0 2 .911 2 2.036v1.866"
+  d2="M18 6.107H12a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-10a2 2 0 0 0-2-2z"/>;
+const CheckIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M20 6L9 17l-5-5"/>;
+const WandIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M17.8 6.2 19 5M12.2 6.2 11 5M12.2 11.8 11 13"
+  d2="m3 21 9-9"/>;
+const SaveIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"
+  d2="M17 21v-8H7v8M7 3v5h8"/>;
+const LogOutIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>;
+const Repeat2Icon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/>;
+const FileTextIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+  d2="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>;
+const XIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M18 6L6 18M6 6l12 12"/>;
+
+// ─── SHARED UI COMPONENTS ─────────────────────────────────
+function Btn({ children, variant='primary', size='md', onClick, disabled, type='button', className='' }) {
+  const base = 'inline-flex items-center justify-center gap-1.5 font-medium rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
+  const variants = {
+    primary: 'bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800',
+    secondary: 'bg-slate-100 text-slate-700 hover:bg-slate-200 active:bg-slate-300',
+    ghost: 'text-slate-600 hover:bg-slate-100 active:bg-slate-200',
+    danger: 'bg-rose-50 text-rose-600 hover:bg-rose-100 active:bg-rose-200',
+    outline: 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+  };
+  const sizes = { sm: 'px-2.5 py-1.5 text-xs', md: 'px-4 py-2 text-sm', lg: 'px-5 py-2.5 text-base' };
+  return (
+    <button type={type} onClick={onClick} disabled={disabled}
+      className={cn(base, variants[variant], sizes[size], className)}>
+      {children}
+    </button>
+  );
+}
+
+function Field({ label, children, required }) {
+  return (
+    <div className="flex flex-col gap-1">
+      {label && <label className="text-xs font-medium text-slate-500">{label}{required && <span className="text-rose-500 ml-0.5">*</span>}</label>}
+      {children}
+    </div>
+  );
+}
+const inputCls = 'rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-full';
+
+function Inp({ label, required, ...props }) {
+  return (
+    <Field label={label} required={required}>
+      <input className={inputCls} {...props} />
+    </Field>
+  );
+}
+function Sel({ label, required, children, ...props }) {
+  return (
+    <Field label={label} required={required}>
+      <select className={inputCls} {...props}>{children}</select>
+    </Field>
+  );
+}
+function Txta({ label, required, rows=4, ...props }) {
+  return (
+    <Field label={label} required={required}>
+      <textarea className={cn(inputCls, 'resize-y leading-relaxed')} rows={rows} {...props} />
+    </Field>
+  );
+}
+
+function Badge({ tone='slate', children }) {
+  return (
+    <span className={cn('inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium', TONE_BADGE[tone])}>
+      {children}
+    </span>
+  );
+}
+
+function StatusBadge({ status }) {
+  const m = STATUS_META[status] || { label: status, tone: 'slate' };
+  return <Badge tone={m.tone}>{m.label}</Badge>;
+}
+
+function PageHeader({ title, subtitle, action, onBack }) {
+  return (
+    <div className="mb-5 flex items-end justify-between gap-3">
+      <div className="flex items-center gap-2 min-w-0">
+        {onBack && (
+          <button onClick={onBack} className="shrink-0 text-slate-400 hover:text-slate-600 p-1 -ml-1">
+            <ArrowLeftIcon size={20}/>
+          </button>
+        )}
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold tracking-tight truncate">{title}</h1>
+          {subtitle && <p className="mt-0.5 text-xs text-slate-500 truncate">{subtitle}</p>}
+        </div>
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+  );
+}
+
+function SectionTitle({ children, count }) {
+  return (
+    <div className="mb-3 flex items-center gap-2">
+      <h2 className="text-sm font-semibold text-slate-700">{children}</h2>
+      {typeof count === 'number' && <span className="font-mono text-xs text-slate-400">{count}</span>}
+    </div>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="py-16 text-center text-sm text-slate-400">読み込み中...</div>
+  );
+}
+function EmptyState({ message, action }) {
+  return (
+    <div className="rounded-xl border border-dashed border-slate-300 bg-white py-14 text-center">
+      <p className="text-sm text-slate-400">{message}</p>
+      {action && <div className="mt-3">{action}</div>}
+    </div>
+  );
+}
+function ErrState({ error }) {
+  return <div className="rounded-lg bg-rose-50 p-4 text-sm text-rose-600">{error}</div>;
+}
+
+function FullModal({ title, onClose, onSave, saveLabel='保存', saving, children }) {
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-white safe-pt">
+      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+        <button onClick={onClose} className="flex items-center gap-1 text-sm text-slate-500">
+          <ArrowLeftIcon size={18}/> 閉じる
+        </button>
+        <h2 className="text-sm font-semibold text-slate-800">{title}</h2>
+        {onSave && (
+          <button onClick={onSave} disabled={saving} className="text-sm font-semibold text-indigo-600 disabled:opacity-40">
+            {saving ? '保存中…' : (saveLabel)}
+          </button>
+        )}
+        {!onSave && <div className="w-14"/>}
+      </div>
+      <div className="flex-1 overflow-y-auto pb-10 px-4 pt-5 space-y-4">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── APP CONTEXT ──────────────────────────────────────────
+const Ctx = createContext(null);
+function useApp() { return useContext(Ctx); }
+
+// ─── PROMPT BRIDGE ────────────────────────────────────────
+function buildPrompt(kind, opp) {
+  const head = `# ${BRIDGE_KIND_LABELS[kind]} の作成依頼\n\n## 案件情報\n- 案件名: ${opp.title}\n- 媒体: ${SOURCE_META[opp.source]?.label || opp.source}\n- 報酬: ${fmtYen(opp.reward_amount)}\n- 納期: ${opp.deadline || '未定'}\n- カテゴリ: ${opp.category}\n\n## 案件本文\n${opp.description}\n`;
+  const bodies = {
+    analysis: `\n## 依頼内容\n上記案件を100点満点で採点し、受注可否を判断してください。\n採点軸：AI適性 / 本橋適性 / 想定作業時間 / 難易度 / 報酬妥当性 / 納期リスク / クライアントリスク\n最後に総合スコアと、応募する場合の訴求ポイント3点を挙げてください。`,
+    proposal: `\n## 依頼内容\n応募用の提案文を作成してください。\n構成: 挨拶→案件理解→対応できる理由→具体的な進め方→納期目安→修正対応可否→締め\nコピペしてそのまま送れる形式でお願いします。`,
+    deliverable: `\n## 依頼内容\n受注済みです。成果物の本体を作成してください。\n※ 成果物タイプ・必要条件はこの下に追記します。`,
+    delivery: `\n## 依頼内容\n成果物が完成したので納品メッセージを作成してください。\n構成: 挨拶→納品内容→確認依頼→修正対応可能である旨→締め\nコピペしてそのまま送れる形式でお願いします。`,
+    revision: `\n## 依頼内容\n修正依頼が来ました。この下に修正依頼文を貼ります。\n1) 修正内容の整理、2) 修正方針、3) 修正版、4) 返信文の順で出力してください。`,
+  };
+  return head + (bodies[kind] || '');
+}
+
+function PromptBridge({ kind, opp }) {
+  const { sb, user } = useApp();
+  const [prompt, setPrompt] = useState('');
+  const [reply, setReply] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const generate = () => { setPrompt(buildPrompt(kind, opp)); setSaved(false); };
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(()=>setCopied(false),1500); } catch(e){}
+  };
+  const save = async () => {
+    if (!reply.trim()) return;
+    setSaving(true);
+    await sb.from('prompt_runs').insert({ user_id: user.id, opportunity_id: opp.id, kind, prompt_text: prompt, ai_response: reply });
+    setSaving(false); setSaved(true);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-sm font-medium text-slate-700">1. プロンプト生成</span>
+          <Btn variant="outline" size="sm" onClick={generate}><WandIcon size={14}/> 生成</Btn>
+        </div>
+        {prompt ? (
+          <>
+            <textarea readOnly value={prompt} className="w-full rounded-lg border border-slate-100 bg-slate-50 p-3 font-mono text-xs leading-relaxed" rows={8}/>
+            <div className="mt-2 flex justify-end">
+              <Btn variant="secondary" size="sm" onClick={copy}>
+                {copied ? <><CheckIcon size={14}/> コピー済み</> : <><CopyIcon size={14}/> Claudeにコピー</>}
+              </Btn>
+            </div>
+          </>
+        ) : (
+          <p className="py-8 text-center text-xs text-slate-400">「生成」を押すとClaudeに渡すプロンプトが生成されます</p>
+        )}
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="mb-2 text-sm font-medium text-slate-700">2. Claudeの回答を貼り付け → 保存</div>
+        <textarea value={reply} onChange={e=>{setReply(e.target.value);setSaved(false);}}
+          placeholder="Claudeで生成した回答をここに貼り付けます"
+          className={cn(inputCls,'resize-y')} rows={6}/>
+        <div className="mt-2 flex items-center justify-end gap-3">
+          {saved && <span className="text-xs text-emerald-600">保存しました</span>}
+          <Btn size="sm" disabled={!reply.trim()||saving} onClick={save}>
+            <SaveIcon size={14}/> {saving ? '保存中…' : '保存'}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SETUP SCREEN ────────────────────────────────────────
+function SetupScreen({ onComplete }) {
+  const [url, setUrl] = useState('');
+  const [key, setKey] = useState('');
+  const [err, setErr] = useState('');
+
+  const save = () => {
+    if (!url.includes('supabase.co') || !key.startsWith('eyJ')) {
+      setErr('URL または anon key が正しくありません。Supabase ダッシュボードの Settings > API から確認してください。');
+      return;
+    }
+    localStorage.setItem('nexus_cfg', JSON.stringify({ url: url.trim(), key: key.trim() }));
+    onComplete({ url: url.trim(), key: key.trim() });
+  };
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center px-6 py-12">
+      <div className="mb-8 text-center">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 font-mono text-2xl font-bold text-white">N</div>
+        <h1 className="text-2xl font-bold">Nexus</h1>
+        <p className="mt-1 text-sm text-slate-500">初回セットアップ</p>
+      </div>
+      <div className="w-full max-w-sm space-y-4">
+        <Inp label="Supabase Project URL" placeholder="https://xxxx.supabase.co" value={url} onChange={e=>setUrl(e.target.value)} />
+        <Inp label="Supabase anon key (public)" placeholder="eyJhbGciOiJIUzI1NiIs..." value={key} onChange={e=>setKey(e.target.value)} />
+        {err && <p className="text-xs text-rose-500">{err}</p>}
+        <Btn className="w-full" onClick={save}>接続して始める</Btn>
+        <p className="text-center text-xs text-slate-400">
+          Supabase ダッシュボード → Settings → API から URL と anon key を確認できます
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── AUTH SCREEN ──────────────────────────────────────────
+function AuthScreen({ sb }) {
+  const [mode, setMode] = useState('login');
+  const [email, setEmail] = useState('');
+  const [pass, setPass] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+  const [msg, setMsg] = useState('');
+
+  const submit = async () => {
+    setErr(''); setMsg(''); setLoading(true);
+    const { error } =
+      mode === 'login'
+        ? await sb.auth.signInWithPassword({ email, password: pass })
+        : await sb.auth.signUp({ email, password: pass });
+    setLoading(false);
+    if (error) { setErr(error.message); return; }
+    if (mode === 'register') setMsg('登録完了。メール認証が必要な場合はメールを確認してください。（不要な場合はそのままログインできます）');
+  };
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center px-6">
+      <div className="mb-8 text-center">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 font-mono text-2xl font-bold text-white">N</div>
+        <h1 className="text-2xl font-bold">Nexus</h1>
+        <p className="mt-1 text-sm text-slate-500">{mode === 'login' ? 'ログイン' : '新規登録'}</p>
+      </div>
+      <div className="w-full max-w-sm space-y-4">
+        <Inp label="メールアドレス" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/>
+        <Inp label="パスワード" type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="8文字以上"/>
+        {err && <p className="text-xs text-rose-500">{err}</p>}
+        {msg && <p className="text-xs text-emerald-600">{msg}</p>}
+        <Btn className="w-full" onClick={submit} disabled={loading}>
+          {loading ? '処理中…' : (mode === 'login' ? 'ログイン' : '登録')}
+        </Btn>
+        <button onClick={()=>{setMode(m=>m==='login'?'register':'login');setErr('');setMsg('');}}
+          className="w-full text-center text-xs text-indigo-600">
+          {mode === 'login' ? '初めての方は登録' : 'すでにアカウントがある方はログイン'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── HOME SCREEN ──────────────────────────────────────────
+function HomeScreen() {
+  const { sb, user, nav } = useApp();
+  const [opps, setOpps] = useState([]);
+  const [schedules, setSchedules] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      const [{ data: o }, { data: s }] = await Promise.all([
+        sb.from('opportunities').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }),
+        sb.from('schedules').select('*').eq('user_id', user.id).eq('status','todo').order('scheduled_date', { ascending: true }).limit(5),
+      ]);
+      setOpps(o || []);
+      setSchedules(s || []);
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const actionOpps = useMemo(() =>
+    (opps || []).filter(o => ['won','in_progress','awaiting_delivery','revision','awaiting_reply'].includes(o.status)),
+    [opps]
+  );
+  const thisMonth = useMemo(() => {
+    const now = new Date();
+    const m = now.getFullYear()+'-'+(String(now.getMonth()+1).padStart(2,'0'));
+    const monthOpps = opps.filter(o => o.updated_at && o.updated_at.startsWith(m));
+    const revenue = opps.filter(o => ['delivered','done'].includes(o.status) && o.updated_at?.startsWith(m))
+                        .reduce((s,o)=>s+o.reward_amount,0);
+    const applied = opps.filter(o=>o.status!=='candidate'&&o.status!=='analyzing').length;
+    const orders = opps.filter(o=>['won','in_progress','awaiting_delivery','delivered','done'].includes(o.status)).length;
+    return { revenue, applied, orders, winRate: applied>0?Math.round(orders/applied*100):0 };
+  }, [opps]);
+
+  const today = new Date().toLocaleDateString('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'long',day:'numeric',weekday:'short'});
+
+  if (loading) return <LoadingState/>;
+  return (
+    <>
+      <PageHeader title="ホーム" subtitle={today}
+        action={<Btn size="sm" onClick={()=>navTo('opps')}><PlusIcon size={14}/> 新規案件</Btn>}/>
+
+      <section className="mb-7">
+        <SectionTitle count={actionOpps.length}>対応が必要な案件</SectionTitle>
+        {actionOpps.length === 0
+          ? <p className="text-sm text-slate-400 py-3">対応中の案件はありません</p>
+          : (
+            <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              {actionOpps.map(o => {
+                const m = STATUS_META[o.status];
+                return (
+                  <button key={o.id} onClick={()=>nav('oppDetail',{id:o.id})}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50">
+                    <span className={cn('h-2 w-2 shrink-0 rounded-full',
+                      m.tone==='amber'?'bg-amber-400':m.tone==='indigo'?'bg-indigo-500':m.tone==='emerald'?'bg-emerald-500':'bg-slate-300')}/>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">{o.title}</div>
+                      <div className="mt-0.5 flex items-center gap-2">
+                        <StatusBadge status={o.status}/>
+                        <span className="font-mono text-xs text-slate-400">{fmtYen(o.reward_amount)}</span>
+                      </div>
+                    </div>
+                    {o.deadline && (
+                      <span className={cn('shrink-0 font-mono text-xs', daysUntil(o.deadline)<=3?'text-rose-500':'text-slate-400')}>
+                        {deadlineLabel(o.deadline)}
+                      </span>
+                    )}
+                    <ChevronRightIcon size={16} className="shrink-0 text-slate-300"/>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+      </section>
+
+      <section className="mb-7 grid grid-cols-2 gap-3">
+        {[
+          { label: '受注率', value: thisMonth.winRate+'%', sub:`応募${thisMonth.applied}→受注${thisMonth.orders}`, accent:'text-emerald-600' },
+          { label: '累計売上', value: fmtYenMan(thisMonth.revenue), sub:'完了済みのみ', accent:'text-indigo-600' },
+        ].map(card => (
+          <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="text-xs text-slate-500">{card.label}</div>
+            <div className={cn('mt-1 font-mono text-2xl font-bold', card.accent)}>{card.value}</div>
+            <div className="mt-1 text-xs text-slate-400">{card.sub}</div>
+          </div>
+        ))}
+      </section>
+
+      {schedules.length > 0 && (
+        <section className="mb-7">
+          <SectionTitle>直近のタスク</SectionTitle>
+          <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            {schedules.map(s => (
+              <div key={s.id} className="flex items-center gap-3 px-4 py-3">
+                <CalendarIcon size={14} className="shrink-0 text-slate-400"/>
+                <span className="flex-1 truncate text-sm text-slate-800">{s.title}</span>
+                {s.scheduled_date && <span className="shrink-0 font-mono text-xs text-slate-400">{fmtDate(s.scheduled_date)}</span>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+
+// ─── OPPORTUNITY FORM ────────────────────────────────────
+const OPP_DEFAULTS = { title:'', source:'crowdworks', url:'', client_name:'', description:'', reward_amount:0, deadline:'', category:'', status:'candidate', score:'', required_skills:'', memo:'' };
+
+function OppForm({ initial, onClose, onSaved }) {
+  const { sb, user } = useApp();
+  const [f, setF] = useState(initial ? {
+    ...initial,
+    required_skills: (initial.required_skills||[]).join(', '),
+    score: initial.score ?? '',
+    reward_amount: initial.reward_amount ?? 0,
+    deadline: initial.deadline || '',
+  } : { ...OPP_DEFAULTS });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const upd = k => e => setF(v => ({ ...v, [k]: e.target.value }));
+
+  const save = async () => {
+    if (!f.title.trim()) { setErr('タイトルを入力してください'); return; }
+    setSaving(true);
+    const payload = {
+      ...f,
+      user_id: user.id,
+      reward_amount: parseInt(f.reward_amount) || 0,
+      score: f.score === '' ? null : parseInt(f.score),
+      deadline: f.deadline || null,
+      required_skills: f.required_skills ? f.required_skills.split(',').map(s=>s.trim()).filter(Boolean) : [],
+    };
+    let error;
+    if (f.id) {
+      ({ error } = await sb.from('opportunities').update(payload).eq('id', f.id).eq('user_id', user.id));
+    } else {
+      ({ error } = await sb.from('opportunities').insert(payload));
+    }
+    setSaving(false);
+    if (error) { setErr(error.message); return; }
+    onSaved();
+  };
+
+  return (
+    <FullModal title={f.id ? '案件を編集' : '案件を追加'} onClose={onClose} onSave={save} saving={saving}>
+      {err && <ErrState error={err}/>}
+      <Inp label="タイトル" required value={f.title} onChange={upd('title')} placeholder="案件名"/>
+      <Sel label="媒体" value={f.source} onChange={upd('source')}>
+        {Object.entries(SOURCE_META).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+      </Sel>
+      <Sel label="ステータス" value={f.status} onChange={upd('status')}>
+        {Object.entries(STATUS_META).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+      </Sel>
+      <Inp label="報酬（円）" type="number" value={f.reward_amount} onChange={upd('reward_amount')} placeholder="50000"/>
+      <Inp label="納期" type="date" value={f.deadline} onChange={upd('deadline')}/>
+      <Inp label="カテゴリ" value={f.category} onChange={upd('category')} placeholder="議事録 / 提案書 / 研修資料 など"/>
+      <Inp label="クライアント名" value={f.client_name} onChange={upd('client_name')}/>
+      <Inp label="案件URL" type="url" value={f.url} onChange={upd('url')}/>
+      <Txta label="案件本文・概要" required rows={5} value={f.description} onChange={upd('description')}/>
+      <Inp label="総合スコア（0-100）" type="number" min="0" max="100" value={f.score} onChange={upd('score')} placeholder="未分析なら空欄"/>
+      <Inp label="必要スキル（カンマ区切り）" value={f.required_skills} onChange={upd('required_skills')} placeholder="議事録作成, 文章整形"/>
+      <Txta label="メモ" rows={3} value={f.memo} onChange={upd('memo')}/>
+    </FullModal>
+  );
+}
+
+// ─── OPPORTUNITY LIST ─────────────────────────────────────
+function OpportunitiesScreen() {
+  const { sb, user, nav } = useApp();
+  const [opps, setOpps] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  const [group, setGroup] = useState('all');
+  const [showForm, setShowForm] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await sb.from('opportunities').select('*').eq('user_id', user.id).order('updated_at', { ascending: false });
+    if (error) { setErr(error.message); } else { setOpps(data||[]); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const filtered = useMemo(() => {
+    const g = STATUS_GROUPS.find(x=>x.key===group);
+    return g?.statuses ? opps.filter(o=>g.statuses.includes(o.status)) : opps;
+  }, [opps, group]);
+
+  if (loading) return <LoadingState/>;
+  return (
+    <>
+      <PageHeader title="案件" subtitle={`${opps.length}件`}
+        action={<Btn size="sm" onClick={()=>setShowForm(true)}><PlusIcon size={14}/> 追加</Btn>}/>
+      {err && <ErrState error={err}/>}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {STATUS_GROUPS.map(g => {
+          const cnt = g.statuses ? opps.filter(o=>g.statuses.includes(o.status)).length : opps.length;
+          return (
+            <button key={g.key} onClick={()=>setGroup(g.key)}
+              className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors',
+                group===g.key ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-200 bg-white text-slate-600')}>
+              {g.label} <span className={cn('font-mono text-xs', group===g.key?'text-indigo-100':'text-slate-400')}>{cnt}</span>
+            </button>
+          );
+        })}
+      </div>
+      {filtered.length === 0
+        ? <EmptyState message="この区分の案件はありません"
+            action={<Btn size="sm" variant="secondary" onClick={()=>setShowForm(true)}>案件を追加</Btn>}/>
+        : (
+          <div className="space-y-2.5">
+            {filtered.map(opp => {
+              const tone = STATUS_META[opp.status]?.tone || 'slate';
+              const days = opp.deadline ? daysUntil(opp.deadline) : null;
+              return (
+                <button key={opp.id} onClick={()=>nav('oppDetail',{id:opp.id})}
+                  className={cn('relative w-full overflow-hidden rounded-xl border border-slate-200 bg-white p-4 text-left transition-all hover:border-slate-300 hover:shadow-sm',
+                    'before:absolute before:inset-y-0 before:left-0 before:w-1 before:content-[""]',
+                    TONE_RAIL[tone])}>
+                  <div className="pl-2">
+                    <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                      <StatusBadge status={opp.status}/>
+                      {days !== null && (
+                        <span className={cn('font-mono text-xs', days<=3?'text-rose-500':'text-slate-400')}>
+                          {deadlineLabel(opp.deadline)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="truncate text-sm font-semibold text-slate-900">{opp.title}</div>
+                    <div className="mt-2 flex items-center gap-3 text-xs text-slate-500">
+                      <span>{SOURCE_META[opp.source]?.label}</span>
+                      <span className="font-mono font-semibold text-slate-700">{fmtYen(opp.reward_amount)}</span>
+                      {opp.score != null && <span className={cn('font-mono font-semibold', opp.score>=85?'text-emerald-600':opp.score>=70?'text-indigo-600':opp.score>=50?'text-amber-600':'text-slate-400')}>{opp.score}<span className="font-normal text-slate-400">/100</span></span>}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      {showForm && <OppForm onClose={()=>setShowForm(false)} onSaved={()=>{setShowForm(false);load();}}/>}
+    </>
+  );
+}
+
+// ─── OPPORTUNITY DETAIL ───────────────────────────────────
+function OppDetailScreen({ id }) {
+  const { sb, user, nav, back } = useApp();
+  const [opp, setOpp] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showEdit, setShowEdit] = useState(false);
+  const [activeTab, setActiveTab] = useState('analysis');
+  const tabs = [
+    { key:'analysis', label:'分析' },
+    { key:'proposal', label:'提案文' },
+    { key:'deliverable', label:'成果物' },
+    { key:'delivery', label:'納品文' },
+    { key:'revision', label:'修正' },
+  ];
+
+  const load = async () => {
+    const { data } = await sb.from('opportunities').select('*').eq('id', id).eq('user_id', user.id).single();
+    setOpp(data);
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, [id]);
+
+  const del = async () => {
+    if (!confirm('この案件を削除しますか？')) return;
+    await sb.from('opportunities').delete().eq('id', id).eq('user_id', user.id);
+    back();
+  };
+
+  if (loading) return <LoadingState/>;
+  if (!opp) return <ErrState error="案件が見つかりませんでした"/>;
+
+  return (
+    <>
+      <PageHeader title={opp.title} onBack={back}
+        action={
+          <div className="flex gap-2">
+            <Btn variant="outline" size="sm" onClick={()=>setShowEdit(true)}><EditIcon size={14}/></Btn>
+            <Btn variant="danger" size="sm" onClick={del}><TrashIcon size={14}/></Btn>
+          </div>
+        }/>
+
+      <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={opp.status}/>
+          <Badge tone="slate">{SOURCE_META[opp.source]?.label}</Badge>
+          {opp.score != null && (
+            <span className={cn('font-mono text-sm font-semibold', opp.score>=85?'text-emerald-600':opp.score>=70?'text-indigo-600':opp.score>=50?'text-amber-600':'text-slate-400')}>
+              スコア {opp.score}/100
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label:'報酬', value: <span className="font-mono font-semibold">{fmtYen(opp.reward_amount)}</span> },
+            { label:'納期', value: opp.deadline ? `${fmtDate(opp.deadline)}（${deadlineLabel(opp.deadline)}）` : '—' },
+            { label:'クライアント', value: opp.client_name || '—' },
+            { label:'カテゴリ', value: opp.category || '—' },
+          ].map(item => (
+            <div key={item.label}>
+              <div className="text-xs text-slate-400">{item.label}</div>
+              <div className="mt-0.5 text-sm text-slate-800">{item.value}</div>
+            </div>
+          ))}
+        </div>
+        {opp.description && (
+          <div>
+            <div className="mb-1 text-xs text-slate-400">案件本文</div>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{opp.description}</p>
+          </div>
+        )}
+        {opp.required_skills?.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {opp.required_skills.map(s=><span key={s} className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{s}</span>)}
+          </div>
+        )}
+        {opp.memo && <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">メモ：{opp.memo}</div>}
+        {opp.url && <a href={opp.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-indigo-600">元の案件を開く →</a>}
+      </div>
+
+      <div className="mb-4">
+        <div className="flex overflow-x-auto gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+          {tabs.map(t => (
+            <button key={t.key} onClick={()=>setActiveTab(t.key)}
+              className={cn('flex-1 rounded-lg py-2 text-xs font-medium whitespace-nowrap transition-colors',
+                activeTab===t.key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-2 text-xs text-slate-400 text-center">
+        プロンプト生成 → Claude貼付 → 保存 の順で使います。応募・送信はNexusからは行いません。
+      </div>
+      <PromptBridge key={activeTab} kind={activeTab} opp={opp}/>
+
+      {showEdit && <OppForm initial={opp} onClose={()=>setShowEdit(false)} onSaved={()=>{setShowEdit(false);load();}}/>}
+    </>
+  );
+}
+
+// ─── SKILL FORM ───────────────────────────────────────────
+const SKILL_DEFAULTS = { name:'', category:'deliverable', purpose:'', output_format:'', usage_count:0, last_used_at:'', notes:'', reusable_internally:false };
+
+function SkillForm({ initial, onClose, onSaved }) {
+  const { sb, user } = useApp();
+  const [f, setF] = useState(initial ? { ...initial, last_used_at: initial.last_used_at||'' } : { ...SKILL_DEFAULTS });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const upd = k => e => setF(v => ({ ...v, [k]: e.target.value }));
+
+  const save = async () => {
+    if (!f.name.trim()) { setErr('Skill名を入力してください'); return; }
+    setSaving(true);
+    const payload = { ...f, user_id: user.id, usage_count: parseInt(f.usage_count)||0, last_used_at: f.last_used_at||null };
+    let error;
+    if (f.id) {
+      ({ error } = await sb.from('skills').update(payload).eq('id', f.id).eq('user_id', user.id));
+    } else {
+      ({ error } = await sb.from('skills').insert(payload));
+    }
+    setSaving(false);
+    if (error) { setErr(error.message); return; }
+    onSaved();
+  };
+
+  return (
+    <FullModal title={f.id ? 'Skillを編集' : 'Skillを追加'} onClose={onClose} onSave={save} saving={saving}>
+      {err && <ErrState error={err}/>}
+      <Inp label="Skill名" required value={f.name} onChange={upd('name')} placeholder="案件分析・提案文作成 など"/>
+      <Sel label="カテゴリ" value={f.category} onChange={upd('category')}>
+        {Object.entries(SKILL_CATEGORY_META).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+      </Sel>
+      <Txta label="用途・目的" rows={3} value={f.purpose} onChange={upd('purpose')} placeholder="このSkillで何をするか"/>
+      <Txta label="出力フォーマット" rows={2} value={f.output_format} onChange={upd('output_format')} placeholder="提案文（コピペ用） / 議事録（箇条書き） など"/>
+      <Inp label="使用回数" type="number" min="0" value={f.usage_count} onChange={upd('usage_count')}/>
+      <Inp label="最終使用日" type="date" value={f.last_used_at} onChange={upd('last_used_at')}/>
+      <Txta label="メモ・コツ" rows={3} value={f.notes} onChange={upd('notes')}/>
+      <div className="flex items-center gap-3">
+        <input type="checkbox" id="ri" checked={!!f.reusable_internally} onChange={e=>setF(v=>({...v,reusable_internally:e.target.checked}))} className="h-4 w-4 rounded border-slate-300 text-indigo-600"/>
+        <label htmlFor="ri" className="text-sm text-slate-700">社内業務にも転用できる</label>
+      </div>
+    </FullModal>
+  );
+}
+
+// ─── SKILL LIST ───────────────────────────────────────────
+function SkillsScreen() {
+  const { sb, user } = useApp();
+  const [skills, setSkills] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await sb.from('skills').select('*').eq('user_id', user.id).order('usage_count', { ascending: false });
+    if (error) setErr(error.message); else setSkills(data||[]);
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const del = async (id) => {
+    if (!confirm('このSkillを削除しますか？')) return;
+    await sb.from('skills').delete().eq('id', id).eq('user_id', user.id);
+    load();
+  };
+
+  if (loading) return <LoadingState/>;
+  return (
+    <>
+      <PageHeader title="Skill" subtitle={`${skills.length}件 / 社内転用 ${skills.filter(s=>s.reusable_internally).length}件`}
+        action={<Btn size="sm" onClick={()=>{setEditing(null);setShowForm(true);}}><PlusIcon size={14}/> 追加</Btn>}/>
+      {err && <ErrState error={err}/>}
+      {skills.length === 0
+        ? <EmptyState message="まだSkillがありません" action={<Btn size="sm" variant="secondary" onClick={()=>setShowForm(true)}>最初のSkillを登録</Btn>}/>
+        : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {skills.map(sk => {
+              const cat = SKILL_CATEGORY_META[sk.category] || { label: sk.category, tone: 'slate' };
+              return (
+                <div key={sk.id} className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col gap-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge tone={cat.tone}>{cat.label}</Badge>
+                      {sk.reusable_internally && <Badge tone="amber"><Repeat2Icon size={11} className="mr-0.5"/>社内転用</Badge>}
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <button onClick={()=>{setEditing(sk);setShowForm(true);}} className="rounded p-1 text-slate-400 hover:bg-slate-100"><EditIcon size={14}/></button>
+                      <button onClick={()=>del(sk.id)} className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-500"><TrashIcon size={14}/></button>
+                    </div>
+                  </div>
+                  <div className="text-sm font-semibold text-slate-900">{sk.name}</div>
+                  {sk.purpose && <p className="line-clamp-2 text-xs text-slate-500">{sk.purpose}</p>}
+                  <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-2.5 text-xs text-slate-400">
+                    <span>使用 <span className="font-mono font-semibold text-slate-600">{sk.usage_count}</span>回</span>
+                    <span className="font-mono">最終 {fmtDate(sk.last_used_at)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      {showForm && <SkillForm initial={editing} onClose={()=>setShowForm(false)} onSaved={()=>{setShowForm(false);load();}}/>}
+    </>
+  );
+}
+
+// ─── KNOWLEDGE FORM ───────────────────────────────────────
+const KW_DEFAULTS = { title:'', category:'general', content:'', tags:'', source_ref:'' };
+
+function KnowledgeForm({ initial, onClose, onSaved }) {
+  const { sb, user } = useApp();
+  const [f, setF] = useState(initial ? { ...initial, tags:(initial.tags||[]).join(', ') } : { ...KW_DEFAULTS });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const upd = k => e => setF(v=>({...v,[k]:e.target.value}));
+
+  const save = async () => {
+    if (!f.title.trim()) { setErr('タイトルを入力してください'); return; }
+    setSaving(true);
+    const payload = { ...f, user_id: user.id, tags: f.tags ? f.tags.split(',').map(s=>s.trim()).filter(Boolean) : [] };
+    let error;
+    if (f.id) {
+      ({ error } = await sb.from('knowledge_items').update(payload).eq('id', f.id).eq('user_id', user.id));
+    } else {
+      ({ error } = await sb.from('knowledge_items').insert(payload));
+    }
+    setSaving(false);
+    if (error) { setErr(error.message); return; }
+    onSaved();
+  };
+
+  return (
+    <FullModal title={f.id ? 'ナレッジを編集' : 'ナレッジを追加'} onClose={onClose} onSave={save} saving={saving}>
+      {err && <ErrState error={err}/>}
+      <Inp label="タイトル" required value={f.title} onChange={upd('title')} placeholder="ナレッジのタイトル"/>
+      <Sel label="カテゴリ" value={f.category} onChange={upd('category')}>
+        {KNOWLEDGE_CATEGORIES.map(k=><option key={k} value={k}>{KNOWLEDGE_CATEGORY_LABELS[k]}</option>)}
+      </Sel>
+      <Txta label="内容" rows={8} value={f.content} onChange={upd('content')} placeholder="気づき・手順・テンプレートなどを自由に記録"/>
+      <Inp label="タグ（カンマ区切り）" value={f.tags} onChange={upd('tags')} placeholder="提案文, CW, 議事録"/>
+      <Inp label="参考元（URL/書名など）" value={f.source_ref} onChange={upd('source_ref')}/>
+    </FullModal>
+  );
+}
+
+// ─── KNOWLEDGE LIST ───────────────────────────────────────
+function KnowledgeScreen() {
+  const { sb, user, nav } = useApp();
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [search, setSearch] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await sb.from('knowledge_items').select('*').eq('user_id', user.id).order('updated_at', { ascending: false });
+    if (error) setErr(error.message); else setItems(data||[]);
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const del = async (id) => {
+    if (!confirm('このナレッジを削除しますか？')) return;
+    await sb.from('knowledge_items').delete().eq('id', id).eq('user_id', user.id);
+    load();
+  };
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return items;
+    const q = search.toLowerCase();
+    return items.filter(i => i.title.toLowerCase().includes(q) || (i.content||'').toLowerCase().includes(q) || (i.tags||[]).some(t=>t.toLowerCase().includes(q)));
+  }, [items, search]);
+
+  if (loading) return <LoadingState/>;
+  return (
+    <>
+      <PageHeader title="ナレッジ" subtitle={`${items.length}件`}
+        action={<Btn size="sm" onClick={()=>{setEditing(null);setShowForm(true);}}><PlusIcon size={14}/> 追加</Btn>}/>
+      {err && <ErrState error={err}/>}
+      <div className="mb-4">
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="タイトル・内容・タグで検索" className={inputCls}/>
+      </div>
+      {filtered.length === 0
+        ? <EmptyState message="ナレッジがありません" action={<Btn size="sm" variant="secondary" onClick={()=>setShowForm(true)}>最初のナレッジを登録</Btn>}/>
+        : (
+          <div className="space-y-2">
+            {filtered.map(item => (
+              <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                      <Badge tone="slate">{KNOWLEDGE_CATEGORY_LABELS[item.category]||item.category}</Badge>
+                      {(item.tags||[]).slice(0,3).map(t=><span key={t} className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">#{t}</span>)}
+                    </div>
+                    <div className="truncate text-sm font-semibold">{item.title}</div>
+                    {item.content && <p className="mt-1 line-clamp-2 text-xs text-slate-500">{item.content}</p>}
+                  </div>
+                  <div className="flex gap-1 shrink-0 ml-2">
+                    <button onClick={()=>nav('kwDetail',{id:item.id})} className="rounded p-1 text-slate-400 hover:bg-slate-100"><ChevronRightIcon size={16}/></button>
+                    <button onClick={()=>{setEditing(item);setShowForm(true);}} className="rounded p-1 text-slate-400 hover:bg-slate-100"><EditIcon size={14}/></button>
+                    <button onClick={()=>del(item.id)} className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-500"><TrashIcon size={14}/></button>
+                  </div>
+                </div>
+                <div className="mt-2 font-mono text-[10px] text-slate-400">{fmtDateFull(item.updated_at)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      {showForm && <KnowledgeForm initial={editing} onClose={()=>setShowForm(false)} onSaved={()=>{setShowForm(false);load();}}/>}
+    </>
+  );
+}
+
+// ─── KNOWLEDGE DETAIL ─────────────────────────────────────
+function KnowledgeDetailScreen({ id }) {
+  const { sb, user, back } = useApp();
+  const [item, setItem] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showEdit, setShowEdit] = useState(false);
+
+  const load = async () => {
+    const { data } = await sb.from('knowledge_items').select('*').eq('id', id).eq('user_id', user.id).single();
+    setItem(data); setLoading(false);
+  };
+  useEffect(() => { load(); }, [id]);
+
+  const del = async () => {
+    if (!confirm('このナレッジを削除しますか？')) return;
+    await sb.from('knowledge_items').delete().eq('id', id).eq('user_id', user.id);
+    back();
+  };
+
+  if (loading) return <LoadingState/>;
+  if (!item) return <ErrState error="ナレッジが見つかりませんでした"/>;
+  return (
+    <>
+      <PageHeader title={item.title} onBack={back}
+        action={<div className="flex gap-2">
+          <Btn variant="outline" size="sm" onClick={()=>setShowEdit(true)}><EditIcon size={14}/></Btn>
+          <Btn variant="danger" size="sm" onClick={del}><TrashIcon size={14}/></Btn>
+        </div>}/>
+      <div className="mb-4 flex flex-wrap gap-1.5">
+        <Badge tone="slate">{KNOWLEDGE_CATEGORY_LABELS[item.category]||item.category}</Badge>
+        {(item.tags||[]).map(t=><span key={t} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-600">#{t}</span>)}
+      </div>
+      {item.source_ref && <p className="mb-4 text-xs text-slate-400">参考：{item.source_ref}</p>}
+      <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <pre className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800 font-sans">{item.content || '（内容なし）'}</pre>
+      </div>
+      <p className="mt-3 text-right font-mono text-xs text-slate-400">更新 {fmtDateFull(item.updated_at)}</p>
+      {showEdit && <KnowledgeForm initial={item} onClose={()=>setShowEdit(false)} onSaved={()=>{setShowEdit(false);load();}}/>}
+    </>
+  );
+}
+
+// ─── SCHEDULE SCREEN ──────────────────────────────────────
+const SCH_DEFAULTS = { title:'', type:'task', scheduled_date:'', opportunity_id:'', status:'todo', notes:'' };
+
+function ScheduleForm({ initial, opps, onClose, onSaved }) {
+  const { sb, user } = useApp();
+  const [f, setF] = useState(initial ? { ...initial, scheduled_date: initial.scheduled_date||'', opportunity_id: initial.opportunity_id||'' } : { ...SCH_DEFAULTS });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const upd = k => e => setF(v=>({...v,[k]:e.target.value}));
+
+  const save = async () => {
+    if (!f.title.trim()) { setErr('タイトルを入力してください'); return; }
+    setSaving(true);
+    const payload = { ...f, user_id: user.id, scheduled_date: f.scheduled_date||null, opportunity_id: f.opportunity_id||null };
+    let error;
+    if (f.id) {
+      ({ error } = await sb.from('schedules').update(payload).eq('id', f.id).eq('user_id', user.id));
+    } else {
+      ({ error } = await sb.from('schedules').insert(payload));
+    }
+    setSaving(false);
+    if (error) { setErr(error.message); return; }
+    onSaved();
+  };
+
+  return (
+    <FullModal title={f.id ? 'タスクを編集' : 'タスクを追加'} onClose={onClose} onSave={save} saving={saving}>
+      {err && <ErrState error={err}/>}
+      <Inp label="タイトル" required value={f.title} onChange={upd('title')} placeholder="タスク内容"/>
+      <Sel label="種別" value={f.type} onChange={upd('type')}>
+        <option value="task">タスク</option>
+        <option value="meeting">打ち合わせ</option>
+        <option value="deadline">締切</option>
+        <option value="other">その他</option>
+      </Sel>
+      <Sel label="ステータス" value={f.status} onChange={upd('status')}>
+        <option value="todo">未完了</option>
+        <option value="done">完了</option>
+      </Sel>
+      <Inp label="予定日" type="date" value={f.scheduled_date} onChange={upd('scheduled_date')}/>
+      <Sel label="関連案件（任意）" value={f.opportunity_id} onChange={upd('opportunity_id')}>
+        <option value="">なし</option>
+        {opps.map(o=><option key={o.id} value={o.id}>{o.title}</option>)}
+      </Sel>
+      <Txta label="メモ" rows={3} value={f.notes} onChange={upd('notes')}/>
+    </FullModal>
+  );
+}
+
+function ScheduleScreen() {
+  const { sb, user } = useApp();
+  const [items, setItems] = useState([]);
+  const [opps, setOpps] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('todo');
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    const [{ data: s }, { data: o }] = await Promise.all([
+      sb.from('schedules').select('*').eq('user_id', user.id).order('scheduled_date', { ascending: true }),
+      sb.from('opportunities').select('id,title').eq('user_id', user.id).order('title'),
+    ]);
+    setItems(s||[]); setOpps(o||[]); setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const toggle = async (item) => {
+    const next = item.status === 'done' ? 'todo' : 'done';
+    await sb.from('schedules').update({ status: next }).eq('id', item.id).eq('user_id', user.id);
+    load();
+  };
+
+  const del = async (id) => {
+    if (!confirm('このタスクを削除しますか？')) return;
+    await sb.from('schedules').delete().eq('id', id).eq('user_id', user.id);
+    load();
+  };
+
+  const filtered = items.filter(i => filter === 'all' || i.status === filter);
+
+  if (loading) return <LoadingState/>;
+  return (
+    <>
+      <PageHeader title="スケジュール" subtitle={`${items.filter(i=>i.status==='todo').length}件 未完了`}
+        action={<Btn size="sm" onClick={()=>{setEditing(null);setShowForm(true);}}><PlusIcon size={14}/> 追加</Btn>}/>
+      <div className="mb-4 flex gap-2">
+        {[{k:'todo',l:'未完了'},{k:'done',l:'完了'},{k:'all',l:'すべて'}].map(({k,l})=>(
+          <button key={k} onClick={()=>setFilter(k)}
+            className={cn('rounded-full border px-3 py-1 text-sm font-medium',
+              filter===k?'border-indigo-600 bg-indigo-600 text-white':'border-slate-200 bg-white text-slate-600')}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {filtered.length === 0
+        ? <EmptyState message="タスクがありません" action={<Btn size="sm" variant="secondary" onClick={()=>setShowForm(true)}>タスクを追加</Btn>}/>
+        : (
+          <div className="space-y-2">
+            {filtered.map(item => {
+              const oppName = opps.find(o=>o.id===item.opportunity_id)?.title;
+              const overdue = item.scheduled_date && daysUntil(item.scheduled_date) < 0 && item.status === 'todo';
+              return (
+                <div key={item.id} className={cn('flex items-start gap-3 rounded-xl border bg-white p-4', overdue ? 'border-rose-200' : 'border-slate-200')}>
+                  <button onClick={()=>toggle(item)} className={cn('mt-0.5 h-5 w-5 shrink-0 rounded border-2 flex items-center justify-center',
+                    item.status==='done'?'border-emerald-500 bg-emerald-500 text-white':'border-slate-300')}>
+                    {item.status==='done' && <CheckIcon size={12}/>}
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className={cn('text-sm font-medium', item.status==='done'?'text-slate-400 line-through':'text-slate-800')}>{item.title}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-slate-400">{item.type==='task'?'タスク':item.type==='meeting'?'打ち合わせ':item.type==='deadline'?'締切':'その他'}</span>
+                      {item.scheduled_date && <span className={cn('font-mono text-xs', overdue?'text-rose-500':'text-slate-400')}>{fmtDate(item.scheduled_date)}</span>}
+                      {oppName && <span className="truncate text-xs text-indigo-600">{oppName}</span>}
+                    </div>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button onClick={()=>{setEditing(item);setShowForm(true);}} className="rounded p-1 text-slate-400 hover:bg-slate-100"><EditIcon size={14}/></button>
+                    <button onClick={()=>del(item.id)} className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-500"><TrashIcon size={14}/></button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      {showForm && <ScheduleForm initial={editing} opps={opps} onClose={()=>setShowForm(false)} onSaved={()=>{setShowForm(false);load();}}/>}
+    </>
+  );
+}
+
+// ─── KPI SCREEN ───────────────────────────────────────────
+function KpiScreen() {
+  const { sb, user } = useApp();
+  const [opps, setOpps] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await sb.from('opportunities').select('*').eq('user_id', user.id);
+      setOpps(data||[]); setLoading(false);
+    };
+    load();
+  }, []);
+
+  const stats = useMemo(() => {
+    const applied = opps.filter(o=>!['candidate','analyzing'].includes(o.status)).length;
+    const orders = opps.filter(o=>['won','in_progress','awaiting_delivery','delivered','done','revision'].includes(o.status)).length;
+    const delivered = opps.filter(o=>['delivered','done'].includes(o.status));
+    const revenue = delivered.reduce((s,o)=>s+o.reward_amount,0);
+    const avg = delivered.length>0 ? Math.round(revenue/delivered.length) : 0;
+    const winRate = applied>0 ? Math.round(orders/applied*100) : 0;
+    return { total: opps.length, applied, orders, winRate, delivered: delivered.length, revenue, avg };
+  }, [opps]);
+
+  const months = useMemo(() => {
+    const map = {};
+    opps.filter(o=>['delivered','done'].includes(o.status)).forEach(o => {
+      const m = (o.updated_at||o.created_at||'').slice(0,7);
+      if (!map[m]) map[m] = { month: m, revenue: 0, count: 0 };
+      map[m].revenue += o.reward_amount;
+      map[m].count++;
+    });
+    return Object.values(map).sort((a,b)=>a.month<b.month?-1:1).slice(-6);
+  }, [opps]);
+  const maxRev = months.length > 0 ? Math.max(...months.map(m=>m.revenue), 1) : 1;
+
+  if (loading) return <LoadingState/>;
+  return (
+    <>
+      <PageHeader title="KPI" subtitle="案件データから自動集計"/>
+      <section className="mb-7 grid grid-cols-2 gap-3">
+        {[
+          { label:'案件候補数', value: stats.total, unit:'件' },
+          { label:'応募数', value: stats.applied, unit:'件' },
+          { label:'受注数', value: stats.orders, unit:'件', accent:'text-emerald-600' },
+          { label:'受注率', value: stats.winRate+'%', accent:'text-emerald-600' },
+          { label:'納品数', value: stats.delivered, unit:'件' },
+          { label:'累計売上', value: fmtYen(stats.revenue), accent:'text-indigo-600' },
+          { label:'平均単価', value: fmtYen(stats.avg), accent:'text-indigo-600' },
+          { label:'稼働案件', value: opps.filter(o=>['won','in_progress','awaiting_delivery','revision'].includes(o.status)).length, unit:'件', accent:'text-amber-600' },
+        ].map(card => (
+          <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="text-xs text-slate-500">{card.label}</div>
+            <div className={cn('mt-1 font-mono text-2xl font-bold', card.accent||'text-slate-900')}>
+              {card.value}<span className="text-sm font-normal text-slate-400 ml-0.5">{card.unit||''}</span>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      {months.length > 0 && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5">
+          <SectionTitle>売上推移（納品済み）</SectionTitle>
+          <div className="flex items-end gap-2 pt-2" style={{height:140}}>
+            {months.map((m,i) => {
+              const h = Math.max(4, Math.round(m.revenue/maxRev*110));
+              const isLast = i === months.length-1;
+              return (
+                <div key={m.month} className="flex flex-1 flex-col items-center gap-1.5">
+                  <span className={cn('font-mono text-[10px]', isLast?'text-indigo-600':'text-slate-400')}>
+                    {fmtYenMan(m.revenue)}
+                  </span>
+                  <div className={cn('w-full rounded-t', isLast?'bg-indigo-500':'bg-slate-200')} style={{height:h}}/>
+                  <span className="text-[10px] text-slate-400">{m.month.slice(5)}月</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+
+// ─── SETTINGS SCREEN ──────────────────────────────────────
+function SettingsScreen() {
+  const { sb, user } = useApp();
+  const cfg = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem('nexus_cfg')||'{}'); } catch { return {}; }
+  }, []);
+
+  const logout = async () => {
+    if (!confirm('ログアウトしますか？')) return;
+    await sb.auth.signOut();
+  };
+  const resetCfg = () => {
+    if (!confirm('Supabase設定をリセットしますか？ログイン画面に戻ります。')) return;
+    localStorage.removeItem('nexus_cfg');
+    window.location.reload();
+  };
+
+  return (
+    <>
+      <PageHeader title="設定"/>
+      <div className="space-y-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <h3 className="mb-3 text-sm font-semibold text-slate-700">アカウント</h3>
+          <p className="mb-4 text-sm text-slate-600">{user?.email}</p>
+          <Btn variant="secondary" onClick={logout}><LogOutIcon size={14}/> ログアウト</Btn>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <h3 className="mb-3 text-sm font-semibold text-slate-700">Supabase 接続設定</h3>
+          <p className="mb-1 text-xs text-slate-500">Project URL</p>
+          <p className="mb-3 font-mono text-xs text-slate-700 break-all">{cfg.url || '—'}</p>
+          <p className="mb-1 text-xs text-slate-500">anon key</p>
+          <p className="mb-4 font-mono text-xs text-slate-700 break-all">{cfg.key ? cfg.key.slice(0,20)+'...' : '—'}</p>
+          <Btn variant="danger" size="sm" onClick={resetCfg}>設定をリセット</Btn>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <h3 className="mb-2 text-sm font-semibold text-slate-700">バージョン情報</h3>
+          <p className="text-xs text-slate-400">Nexus v1.0 — Single HTML + Supabase</p>
+          <p className="text-xs text-slate-400">将来的に Next.js へ移行予定</p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── APP SHELL ────────────────────────────────────────────
+const NAV_ITEMS = [
+  { screen:'home',      label:'ホーム',      Icon:HomeIcon },
+  { screen:'opps',      label:'案件',        Icon:BriefcaseIcon },
+  { screen:'skills',    label:'Skill',       Icon:SparklesIcon },
+  { screen:'knowledge', label:'ナレッジ',    Icon:BookOpenIcon },
+  { screen:'schedule',  label:'スケジュール',Icon:CalendarIcon },
+];
+
+function AppShell({ children, currentScreen, navTo }) {
+  const rootScreen = currentScreen.screen;
+  const activeNav = ['oppDetail','oppNew'].includes(rootScreen) ? 'opps'
+    : rootScreen === 'kwDetail' ? 'knowledge'
+    : rootScreen === 'kpi' ? 'kpi'
+    : rootScreen;
+
+  return (
+    <div className="flex min-h-screen flex-col md:flex-row">
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex md:w-56 md:flex-col md:fixed md:inset-y-0 border-r border-slate-200 bg-white">
+        <div className="flex h-16 items-center gap-2 px-5 border-b border-slate-100">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 font-mono text-base font-bold text-white shrink-0">N</div>
+          <div>
+            <div className="text-sm font-semibold">Nexus</div>
+            <div className="font-mono text-[10px] text-slate-400">personal AI OS</div>
+          </div>
+        </div>
+        <nav className="flex-1 px-3 py-3 space-y-0.5">
+          {NAV_ITEMS.map(({screen,label,Icon})=>(
+            <button key={screen} onClick={()=>navTo(screen)}
+              className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                activeNav===screen ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-100')}>
+              <Icon size={18}/>{label}
+            </button>
+          ))}
+          <button onClick={()=>navTo('kpi')}
+            className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+              activeNav==='kpi' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-100')}>
+            <BarChartIcon size={18}/>KPI
+          </button>
+          <button onClick={()=>navTo('settings')}
+            className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+              activeNav==='settings' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-100')}>
+            <SettingsIcon size={18}/>設定
+          </button>
+        </nav>
+      </aside>
+
+      {/* Main */}
+      <div className="flex-1 md:ml-56">
+        <main className="mx-auto max-w-2xl px-4 pt-6 pb-28 md:pb-12 md:pt-8 md:px-8">
+          {children}
+        </main>
+      </div>
+
+      {/* Mobile bottom nav */}
+      <nav className="fixed bottom-0 inset-x-0 z-30 md:hidden bg-white/95 backdrop-blur border-t border-slate-200 safe-pb">
+        <div className="flex">
+          {NAV_ITEMS.map(({screen,label,Icon})=>(
+            <button key={screen} onClick={()=>navTo(screen)}
+              className={cn('flex flex-1 flex-col items-center gap-1 pt-2.5 pb-1 text-[10px] font-medium',
+                activeNav===screen ? 'text-indigo-600' : 'text-slate-400')}>
+              <Icon size={22}/>
+              {label}
+            </button>
+          ))}
+        </div>
+      </nav>
+    </div>
+  );
+}
+
+// ─── ROOT APP ─────────────────────────────────────────────
+function App() {
+  const [cfg, setCfg] = useState(() => {
+    try { const s = localStorage.getItem('nexus_cfg'); return s ? JSON.parse(s) : null; } catch { return null; }
+  });
+  const [sb, setSb] = useState(() => {
+    try {
+      const s = localStorage.getItem('nexus_cfg');
+      if (!s) return null;
+      const { url, key } = JSON.parse(s);
+      return window.supabase.createClient(url, key);
+    } catch { return null; }
+  });
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [history, setHistory] = useState([{ screen: 'home' }]);
+
+  const currentRoute = history[history.length - 1];
+
+  const nav = useCallback((screen, params = {}) => {
+    setHistory(h => [...h, { screen, ...params }]);
+  }, []);
+  const back = useCallback(() => {
+    setHistory(h => h.length > 1 ? h.slice(0, -1) : h);
+  }, []);
+  const navTo = useCallback((screen) => {
+    setHistory([{ screen }]);
+  }, []);
+
+  useEffect(() => {
+    if (!sb) { setAuthLoading(false); return; }
+    sb.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+    const { data: { subscription } } = sb.auth.onAuthStateChange((_e, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, [sb]);
+
+  const handleSetupComplete = ({ url, key }) => {
+    const client = window.supabase.createClient(url, key);
+    setSb(client);
+    setCfg({ url, key });
+  };
+
+  if (!cfg || !sb) return <SetupScreen onComplete={handleSetupComplete}/>;
+  if (authLoading) return <div className="flex min-h-screen items-center justify-center text-sm text-slate-400">起動中...</div>;
+  if (!user) return <AuthScreen sb={sb}/>;
+
+  const ctx = { sb, user, nav, back, navTo, currentRoute };
+
+  const renderScreen = () => {
+    const { screen, id } = currentRoute;
+    switch (screen) {
+      case 'home':      return <HomeScreen/>;
+      case 'opps':      return <OpportunitiesScreen/>;
+      case 'oppDetail': return <OppDetailScreen id={id}/>;
+      case 'oppNew':    return <OpportunitiesScreen/>;
+      case 'skills':    return <SkillsScreen/>;
+      case 'knowledge': return <KnowledgeScreen/>;
+      case 'kwDetail':  return <KnowledgeDetailScreen id={id}/>;
+      case 'schedule':  return <ScheduleScreen/>;
+      case 'kpi':       return <KpiScreen/>;
+      case 'settings':  return <SettingsScreen/>;
+      default:          return <HomeScreen/>;
+    }
+  };
+
+  return (
+    <Ctx.Provider value={ctx}>
+      <AppShell currentScreen={currentRoute} navTo={navTo}>
+        {renderScreen()}
+      </AppShell>
+    </Ctx.Provider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+</body>
+</html>
