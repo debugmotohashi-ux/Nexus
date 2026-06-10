@@ -972,8 +972,33 @@ function SkillForm({ initial, categories, onClose, onSaved }) {
 }
 
 // ─── SKILL JSON HELPERS ───────────────────────────────────
-function stripJsonFences(text) {
-  return text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
+function cleanJsonInput(raw) {
+  let s = raw;
+  // 1. 前後の空白・改行を除去
+  s = s.trim();
+  // 2. BOM・不可視文字・ゼロ幅スペースを除去
+  s = s.replace(/^\uFEFF/, '').replace(/[\u200B\u200C\u200D\u00A0\u2060]/g, '');
+  // 3. スマートクォート（Wordやメモ帳由来）を通常クォートに変換
+  s = s.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'");
+  // 4. ```json ... ``` または ``` ... ``` のMarkdownフェンスを除去（改行・スペースも含む）
+  s = s.replace(/^```(?:json)?[\s\r\n]*/i, '').replace(/[\s\r\n]*```\s*$/, '');
+  // 5. 再度trim
+  s = s.trim();
+  return s;
+}
+function getJsonErrDetail(cleaned, err) {
+  const msg = err.message || '';
+  // V8系: "at position 123" / JSC(Safari): "JSON Parse error: ..."
+  const posMatch = msg.match(/position\s+(\d+)/i);
+  if (posMatch) {
+    const pos = parseInt(posMatch[1]);
+    const before = cleaned.slice(0, pos);
+    const line = (before.match(/\n/g) || []).length + 1;
+    const col = before.length - before.lastIndexOf('\n');
+    const near = cleaned.slice(Math.max(0, pos - 15), pos + 15).replace(/\n/g, '↵');
+    return `${line}行目 ${col}文字目付近 → ...${near}...`;
+  }
+  return msg || '詳細不明';
 }
 function normalizeSkill(d, userId) {
   return {
@@ -1065,11 +1090,15 @@ function SkillBuilder({ categories, onClose, onSaved }) {
   const copy = async () => { try { await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(()=>setCopied(false),1500);} catch(e){} };
   const doParse = () => {
     setErr('');
+    const cleaned = cleanJsonInput(reply);
     try {
-      const obj = JSON.parse(stripJsonFences(reply));
-      if (!obj || !obj.name) { setErr('nameが見つかりません。JSON部分だけを貼り付けてください。'); return; }
+      let obj = JSON.parse(cleaned);
+      if (Array.isArray(obj)) obj = obj[0];
+      if (!obj || !obj.name) { setErr('nameが見つかりません。JSON部分（{ }）だけを貼り付けてください。'); return; }
       setParsed(obj);
-    } catch(e) { setErr('JSONとして読み取れませんでした。Claudeの回答からJSON部分（{ }）だけを貼ってください。'); }
+    } catch(e) {
+      setErr('JSONとして読み取れませんでした。\n' + getJsonErrDetail(cleaned, e));
+    }
   };
   const save = async () => {
     setSaving(true);
@@ -1126,13 +1155,16 @@ function SkillImport({ onClose, onSaved }) {
 
   const doParse = () => {
     setErr('');
+    const cleaned = cleanJsonInput(json);
     try {
-      let data = JSON.parse(stripJsonFences(json));
+      let data = JSON.parse(cleaned);
       if (!Array.isArray(data)) data = [data];
       const valid = data.filter(d => d && d.name);
       if (valid.length === 0) { setErr('nameを持つSkillが見つかりませんでした。'); return; }
       setList(valid);
-    } catch(e) { setErr('JSONとして読み取れませんでした。形式を確認してください。'); }
+    } catch(e) {
+      setErr('JSONとして読み取れませんでした。\n' + getJsonErrDetail(cleaned, e));
+    }
   };
   const doImport = async () => {
     setSaving(true);
