@@ -2,6 +2,19 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
+  <script>
+    // 画面が真っ白になる代わりにエラー内容を表示する（デバッグ用）
+    window.addEventListener('error', function(e){
+      var r = document.getElementById('root');
+      if (r && !r.hasChildNodes()) {
+        var msg = (e && e.message) || (e && e.error && e.error.message) || '不明なエラー';
+        var loc = e && e.lineno ? ('行 ' + e.lineno + ':' + (e.colno||'')) : '';
+        var stack = (e && e.error && e.error.stack) ? ('\n\n' + e.error.stack) : '';
+        r.innerHTML = '<div style="padding:20px;font-family:ui-monospace,monospace;font-size:12px;color:#b91c1c;white-space:pre-wrap;line-height:1.6;">'
+          + '⚠️ 読み込みエラー\n\n' + msg + '\n' + loc + stack + '</div>';
+      }
+    });
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
