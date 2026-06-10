@@ -971,6 +971,297 @@ function SkillForm({ initial, categories, onClose, onSaved }) {
   );
 }
 
+// ─── SKILL JSON HELPERS ───────────────────────────────────
+function stripJsonFences(text) {
+  return text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
+}
+function normalizeSkill(d, userId) {
+  return {
+    user_id: userId,
+    name: d.name,
+    category: d.category || '',
+    scope: ['common','work_only','freelance_only'].includes(d.scope) ? d.scope : 'common',
+    purpose: d.purpose || '',
+    output_format: d.output_format || '',
+    prompt_template: d.prompt_template || '',
+    notes: d.notes || '',
+    reusable_internally: d.reusable_internally !== false,
+    usage_count: 0,
+    last_used_at: null,
+  };
+}
+
+// ─── SKILL ACTION MENU (bottom sheet) ─────────────────────
+function SkillActionMenu({ onPick, onClose }) {
+  const items = [
+    { key:'manual',    icon:'✍️', label:'手動で作成',          desc:'フォームに直接入力' },
+    { key:'builder',   icon:'✨', label:'Skill Builder',        desc:'やりたいことからAIが下書き' },
+    { key:'import',    icon:'📥', label:'JSONから一括登録',     desc:'まとめて取り込む' },
+    { key:'incubator', icon:'🌱', label:'Skill Incubator',      desc:'活動からSkill候補を提案' },
+    { key:'export',    icon:'📤', label:'JSONでエクスポート',   desc:'バックアップ・共有' },
+    { key:'category',  icon:'🏷️', label:'カテゴリ管理',         desc:'' },
+  ];
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40" onClick={onClose}>
+      <div className="rounded-t-2xl bg-white p-4 safe-pb" onClick={e=>e.stopPropagation()}>
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-slate-200"/>
+        <div className="space-y-1">
+          {items.map(it => (
+            <button key={it.key} onClick={()=>onPick(it.key)}
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 active:bg-slate-100">
+              <span className="text-xl shrink-0">{it.icon}</span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-slate-800">{it.label}</div>
+                {it.desc && <div className="text-xs text-slate-400">{it.desc}</div>}
+              </div>
+            </button>
+          ))}
+        </div>
+        <button onClick={onClose} className="mt-2 w-full rounded-xl bg-slate-100 py-3 text-sm font-medium text-slate-600">閉じる</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── SKILL BUILDER ────────────────────────────────────────
+function buildSkillBuilderPrompt(intent, categories) {
+  const catList = categories.map(c=>c.name).join(' / ') || '分析 / 提案 / 成果物 / 連絡 / 社内業務';
+  return `あなたはNexusのSkill設計アシスタントです。
+以下の「やりたいこと」から、再利用可能なSkillを1つ設計してください。
+
+# やりたいこと
+${intent}
+
+# 設計ルール
+- categoryは次から選ぶか、適切な新カテゴリ名を作る: ${catList}
+- scopeは common(本業副業共通) / work_only(本業専用) / freelance_only(副業専用) から選ぶ
+- prompt_templateは、このSkillを実行するときにそのまま使える定型プロンプト本体にする（可変部分は{案件名}のように波括弧で示す）
+
+# 出力
+説明や前置きを書かず、以下のJSONのみを出力してください:
+{
+  "name": "Skill名",
+  "category": "カテゴリ名",
+  "scope": "common",
+  "purpose": "用途・目的（1〜2文）",
+  "output_format": "出力フォーマット",
+  "prompt_template": "定型プロンプト本体",
+  "notes": "使うときのコツ・注意点",
+  "reusable_internally": true
+}`;
+}
+
+function SkillBuilder({ categories, onClose, onSaved }) {
+  const { sb, user } = useApp();
+  const [intent, setIntent] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [reply, setReply] = useState('');
+  const [parsed, setParsed] = useState(null);
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const generate = () => { if (intent.trim()) setPrompt(buildSkillBuilderPrompt(intent, categories)); };
+  const copy = async () => { try { await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(()=>setCopied(false),1500);} catch(e){} };
+  const doParse = () => {
+    setErr('');
+    try {
+      const obj = JSON.parse(stripJsonFences(reply));
+      if (!obj || !obj.name) { setErr('nameが見つかりません。JSON部分だけを貼り付けてください。'); return; }
+      setParsed(obj);
+    } catch(e) { setErr('JSONとして読み取れませんでした。Claudeの回答からJSON部分（{ }）だけを貼ってください。'); }
+  };
+  const save = async () => {
+    setSaving(true);
+    const { error } = await sb.from('skills').insert(normalizeSkill(parsed, user.id));
+    setSaving(false);
+    if (error) { setErr(error.message); return; }
+    onSaved();
+  };
+
+  return (
+    <FullModal title="Skill Builder" onClose={onClose} onSave={parsed ? save : null} saveLabel="保存して登録" saving={saving}>
+      <p className="rounded-lg bg-indigo-50 p-3 text-xs leading-relaxed text-indigo-700">
+        やりたいことを書く → プロンプト生成 → Claudeに貼る → 返ってきたJSONを下に貼り付け → 確認 → 保存
+      </p>
+      <Txta label="やりたいこと" rows={3} value={intent} onChange={e=>setIntent(e.target.value)}
+        placeholder="例：教育共有を作りたい / 営業数値の分析をしたい / 提案書のたたきを作りたい"/>
+      <Btn variant="outline" size="sm" onClick={generate} disabled={!intent.trim()}><WandIcon size={14}/> プロンプト生成</Btn>
+
+      {prompt && (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <textarea readOnly value={prompt} rows={7} className="w-full rounded-lg border border-slate-100 bg-slate-50 p-3 font-mono text-xs leading-relaxed"/>
+          <div className="mt-2 flex justify-end">
+            <Btn variant="secondary" size="sm" onClick={copy}>{copied?<><CheckIcon size={14}/> コピー済み</>:<><CopyIcon size={14}/> Claudeにコピー</>}</Btn>
+          </div>
+        </div>
+      )}
+
+      <Txta label="ClaudeのJSON回答を貼り付け" rows={6} value={reply} onChange={e=>{setReply(e.target.value);setParsed(null);}}
+        placeholder='{ "name": "...", "category": "...", ... }'/>
+      <Btn variant="outline" size="sm" onClick={doParse} disabled={!reply.trim()}>内容を確認</Btn>
+      {err && <ErrState error={err}/>}
+
+      {parsed && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-1.5">
+          <div className="text-sm font-semibold text-emerald-800">プレビュー</div>
+          <div className="text-sm"><span className="text-slate-500">名前：</span>{parsed.name}</div>
+          <div className="text-sm"><span className="text-slate-500">カテゴリ：</span>{parsed.category||'未設定'} / <span className="text-slate-500">範囲：</span>{SCOPE_LABEL[parsed.scope]||'共通'}</div>
+          {parsed.purpose && <div className="text-xs text-slate-600">{parsed.purpose}</div>}
+          {parsed.prompt_template && <div className="text-xs text-emerald-700">📋 プロンプトテンプレートあり</div>}
+          <div className="pt-1 text-xs text-emerald-700">右上「保存して登録」で追加されます</div>
+        </div>
+      )}
+    </FullModal>
+  );
+}
+
+// ─── SKILL IMPORT (bulk JSON) ─────────────────────────────
+function SkillImport({ onClose, onSaved }) {
+  const { sb, user } = useApp();
+  const [json, setJson] = useState('');
+  const [list, setList] = useState(null);
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const doParse = () => {
+    setErr('');
+    try {
+      let data = JSON.parse(stripJsonFences(json));
+      if (!Array.isArray(data)) data = [data];
+      const valid = data.filter(d => d && d.name);
+      if (valid.length === 0) { setErr('nameを持つSkillが見つかりませんでした。'); return; }
+      setList(valid);
+    } catch(e) { setErr('JSONとして読み取れませんでした。形式を確認してください。'); }
+  };
+  const doImport = async () => {
+    setSaving(true);
+    const rows = list.map(d => normalizeSkill(d, user.id));
+    const { error } = await sb.from('skills').insert(rows);
+    setSaving(false);
+    if (error) { setErr(error.message); return; }
+    onSaved();
+  };
+
+  return (
+    <FullModal title="JSONから一括登録" onClose={onClose} onSave={list ? doImport : null} saveLabel={list ? list.length+'件を登録' : '登録'} saving={saving}>
+      <p className="text-xs leading-relaxed text-slate-500">ChatGPT等で作ったSkillのJSONを貼り付けてください。配列でも単体でも取り込めます。</p>
+      <Txta label="Skill JSON" rows={9} value={json} onChange={e=>{setJson(e.target.value);setList(null);}}
+        placeholder='[ { "name": "議事録作成", "category": "成果物", ... } ]'/>
+      <Btn variant="outline" size="sm" onClick={doParse} disabled={!json.trim()}>内容を確認</Btn>
+      {err && <ErrState error={err}/>}
+      {list && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <div className="mb-2 text-sm font-semibold text-emerald-800">{list.length}件のSkillを登録します</div>
+          <div className="space-y-1 max-h-60 overflow-y-auto">
+            {list.map((d,i)=><div key={i} className="text-sm text-slate-700">・{d.name} <span className="text-xs text-slate-400">{d.category||''}</span></div>)}
+          </div>
+        </div>
+      )}
+      <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <summary className="cursor-pointer text-xs font-medium text-slate-600">JSON形式の例を見る</summary>
+        <pre className="mt-2 overflow-x-auto rounded bg-white p-2 font-mono text-[10px] leading-relaxed text-slate-600">{`[
+  {
+    "name": "議事録作成",
+    "category": "成果物",
+    "scope": "common",
+    "purpose": "音声やメモから議事録を作る",
+    "output_format": "決定事項とToDoを分けた議事録",
+    "prompt_template": "以下の内容から議事録を作成してください...",
+    "notes": "決定事項とToDoを必ず分ける",
+    "reusable_internally": true
+  }
+]`}</pre>
+      </details>
+    </FullModal>
+  );
+}
+
+// ─── SKILL EXPORT ─────────────────────────────────────────
+function SkillExport({ onClose }) {
+  const { sb, user } = useApp();
+  const [json, setJson] = useState('');
+  const [count, setCount] = useState(0);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    sb.from('skills').select('name,category,scope,purpose,output_format,prompt_template,notes,reusable_internally')
+      .eq('user_id', user.id).order('usage_count', { ascending: false })
+      .then(({ data }) => { setJson(JSON.stringify(data||[], null, 2)); setCount((data||[]).length); });
+  }, []);
+
+  const copy = async () => { try { await navigator.clipboard.writeText(json); setCopied(true); setTimeout(()=>setCopied(false),1500);} catch(e){} };
+
+  return (
+    <FullModal title="JSONでエクスポート" onClose={onClose}>
+      <p className="text-xs text-slate-500">{count}件のSkillをJSONで出力しました。コピーして保管すればバックアップ・共有・別環境への移行に使えます。</p>
+      <textarea readOnly value={json} rows={16} className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs leading-relaxed"/>
+      <Btn onClick={copy} className="w-full">{copied?<><CheckIcon size={14}/> コピーしました</>:<><CopyIcon size={14}/> 全部コピー</>}</Btn>
+    </FullModal>
+  );
+}
+
+// ─── SKILL INCUBATOR ──────────────────────────────────────
+function SkillIncubator({ onClose }) {
+  const { sb, user } = useApp();
+  const [prompt, setPrompt] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      const [{ data: runs }, { data: kw }, { data: sk }] = await Promise.all([
+        sb.from('prompt_runs').select('kind,ai_response,created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(15),
+        sb.from('knowledge_items').select('title,category,content').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(20),
+        sb.from('skills').select('name,category').eq('user_id', user.id),
+      ]);
+      const runsTxt = (runs||[]).map(r=>`- [${r.kind}] ${(r.ai_response||'').replace(/\s+/g,' ').slice(0,160)}`).join('\n') || '（まだ実績なし）';
+      const kwTxt = (kw||[]).map(k=>`- ${k.title}（${k.category}）`).join('\n') || '（まだナレッジなし）';
+      const skTxt = (sk||[]).map(s=>`- ${s.name}`).join('\n') || '（まだSkillなし）';
+      setPrompt(`あなたはNexusのSkill Incubatorです。
+私の蓄積データを分析し、再利用可能な「新しいSkill候補」または「既存Skillの改善案」を提案してください。
+
+# 既存のSkill
+${skTxt}
+
+# 最近のAI活用履歴（案件作業）
+${runsTxt}
+
+# 蓄積ナレッジ
+${kwTxt}
+
+# 依頼
+1. 上記から繰り返し現れるパターンや、優れた考え方を見つける
+2. 本業・副業を横断して再利用できる新しいSkill候補を最大3つ提案する
+3. 既存Skillに統合・改善できる点があれば指摘する
+4. 提案するSkill候補は、そのままNexusに取り込めるよう以下のJSON配列でも出力する:
+
+[
+  { "name":"", "category":"", "scope":"common", "purpose":"", "output_format":"", "prompt_template":"", "notes":"", "reusable_internally":true }
+]`);
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const copy = async () => { try { await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(()=>setCopied(false),1500);} catch(e){} };
+
+  return (
+    <FullModal title="Skill Incubator" onClose={onClose}>
+      <p className="rounded-lg bg-emerald-50 p-3 text-xs leading-relaxed text-emerald-700">
+        蓄積した活動・ナレッジ・AI履歴から「Skill候補」を提案するプロンプトを生成します。Claudeに貼ると、JSON形式でSkill候補が返ります。それを「JSONから一括登録」に貼れば取り込めます。活動が増えるほど精度が上がります。
+      </p>
+      {loading ? <LoadingState/> : (
+        <>
+          <textarea readOnly value={prompt} rows={14} className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs leading-relaxed"/>
+          <Btn onClick={copy} className="w-full">{copied?<><CheckIcon size={14}/> コピーしました</>:<><CopyIcon size={14}/> Claudeにコピー</>}</Btn>
+        </>
+      )}
+    </FullModal>
+  );
+}
+
+
 // ─── SKILL LIST ───────────────────────────────────────────
 function SkillsScreen() {
   const { sb, user } = useApp();
@@ -978,9 +1269,9 @@ function SkillsScreen() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
-  const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [showCatMgr, setShowCatMgr] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [modal, setModal] = useState(null); // manual|builder|import|export|incubator|category
 
   const load = async () => {
     setLoading(true);
@@ -1021,15 +1312,10 @@ function SkillsScreen() {
   return (
     <>
       <PageHeader title="Skill" subtitle={`${skills.length}件 / 社内転用 ${skills.filter(s=>s.reusable_internally).length}件`}
-        action={
-          <div className="flex gap-2">
-            <Btn variant="outline" size="sm" onClick={()=>setShowCatMgr(true)}>カテゴリ</Btn>
-            <Btn size="sm" onClick={()=>{setEditing(null);setShowForm(true);}}><PlusIcon size={14}/> 追加</Btn>
-          </div>
-        }/>
+        action={<Btn size="sm" onClick={()=>setShowMenu(true)}><PlusIcon size={14}/> 追加</Btn>}/>
       {err && <ErrState error={err}/>}
       {skills.length === 0
-        ? <EmptyState message="まだSkillがありません" action={<Btn size="sm" variant="secondary" onClick={()=>setShowForm(true)}>最初のSkillを登録</Btn>}/>
+        ? <EmptyState message="まだSkillがありません" action={<Btn size="sm" variant="secondary" onClick={()=>setShowMenu(true)}>最初のSkillを登録</Btn>}/>
         : (
           <div className="grid gap-3 sm:grid-cols-2">
             {skills.map(sk => {
@@ -1045,7 +1331,7 @@ function SkillsScreen() {
                     <div className="flex gap-1 shrink-0">
                       <button onClick={()=>recordUsage(sk)} title="使用を記録（✓）" className="rounded p-1 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600"><CheckIcon size={14}/></button>
                       <button onClick={()=>duplicate(sk)} title="複製" className="rounded p-1 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Repeat2Icon size={14}/></button>
-                      <button onClick={()=>{setEditing(sk);setShowForm(true);}} className="rounded p-1 text-slate-400 hover:bg-slate-100"><EditIcon size={14}/></button>
+                      <button onClick={()=>{setEditing(sk);setModal('manual');}} className="rounded p-1 text-slate-400 hover:bg-slate-100"><EditIcon size={14}/></button>
                       <button onClick={()=>del(sk.id)} className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-500"><TrashIcon size={14}/></button>
                     </div>
                   </div>
@@ -1061,8 +1347,13 @@ function SkillsScreen() {
             })}
           </div>
         )}
-      {showForm && <SkillForm initial={editing} categories={categories} onClose={()=>setShowForm(false)} onSaved={()=>{setShowForm(false);load();}}/>}
-      {showCatMgr && <SkillCategoryManager onClose={()=>{setShowCatMgr(false);load();}}/>}
+      {showMenu && <SkillActionMenu onClose={()=>setShowMenu(false)} onPick={(k)=>{setShowMenu(false); if(k==='manual'){setEditing(null);} setModal(k);}}/>}
+      {modal==='manual' && <SkillForm initial={editing} categories={categories} onClose={()=>{setModal(null);setEditing(null);}} onSaved={()=>{setModal(null);setEditing(null);load();}}/>}
+      {modal==='builder' && <SkillBuilder categories={categories} onClose={()=>setModal(null)} onSaved={()=>{setModal(null);load();}}/>}
+      {modal==='import' && <SkillImport onClose={()=>setModal(null)} onSaved={()=>{setModal(null);load();}}/>}
+      {modal==='export' && <SkillExport onClose={()=>setModal(null)}/>}
+      {modal==='incubator' && <SkillIncubator onClose={()=>setModal(null)}/>}
+      {modal==='category' && <SkillCategoryManager onClose={()=>{setModal(null);load();}}/>}
     </>
   );
 }
