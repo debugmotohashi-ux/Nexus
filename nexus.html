@@ -4,8 +4,29 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Nexus" />
+  <link rel="manifest" href="manifest.json" />
   <title>Nexus</title>
+  <script>
+    // PWAアイコンをCanvasで動的生成（インストール時に使われる）
+    document.addEventListener('DOMContentLoaded', function() {
+      try {
+        var c = document.createElement('canvas'); c.width = 180; c.height = 180;
+        var ctx = c.getContext('2d');
+        ctx.fillStyle = '#4F46E5';
+        if (ctx.roundRect) { ctx.roundRect(0,0,180,180,32); ctx.fill(); }
+        else { ctx.fillRect(0,0,180,180); }
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 96px -apple-system,system-ui,sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('N', 90, 96);
+        var link = document.createElement('link');
+        link.rel = 'apple-touch-icon'; link.href = c.toDataURL('image/png');
+        document.head.appendChild(link);
+      } catch(e) {}
+    });
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -190,6 +211,8 @@ const FileTextIcon = ({size, className}) => <SvgIcon size={size} className={clas
   d2="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>;
 const XIcon = ({size, className}) => <SvgIcon size={size} className={className}
   d="M18 6L6 18M6 6l12 12"/>;
+const PlayIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M5 3l14 9-14 9V3z"/>;
 
 // ─── SHARED UI COMPONENTS ─────────────────────────────────
 function Btn({ children, variant='primary', size='md', onClick, disabled, type='button', className='' }) {
@@ -687,6 +710,8 @@ function OpportunitiesScreen() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [group, setGroup] = useState('all');
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState('updated');
   const [showForm, setShowForm] = useState(false);
 
   const load = async () => {
@@ -699,8 +724,23 @@ function OpportunitiesScreen() {
 
   const filtered = useMemo(() => {
     const g = STATUS_GROUPS.find(x=>x.key===group);
-    return g?.statuses ? opps.filter(o=>g.statuses.includes(o.status)) : opps;
-  }, [opps, group]);
+    let result = g?.statuses ? opps.filter(o=>g.statuses.includes(o.status)) : opps;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(o =>
+        o.title.toLowerCase().includes(q) ||
+        (o.description||'').toLowerCase().includes(q) ||
+        (o.client_name||'').toLowerCase().includes(q) ||
+        (o.category||'').toLowerCase().includes(q)
+      );
+    }
+    if (sortKey === 'reward') result = [...result].sort((a,b) => b.reward_amount - a.reward_amount);
+    else if (sortKey === 'deadline') result = [...result].sort((a,b) => {
+      if (!a.deadline) return 1; if (!b.deadline) return -1;
+      return a.deadline < b.deadline ? -1 : 1;
+    });
+    return result;
+  }, [opps, group, search, sortKey]);
 
   if (loading) return <LoadingState/>;
   return (
@@ -708,6 +748,16 @@ function OpportunitiesScreen() {
       <PageHeader title="案件" subtitle={`${opps.length}件`}
         action={<Btn size="sm" onClick={()=>setShowForm(true)}><PlusIcon size={14}/> 追加</Btn>}/>
       {err && <ErrState error={err}/>}
+      <div className="mb-3 flex gap-2">
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="タイトル・クライアント・内容で検索"
+          className={cn(inputCls,'flex-1')}/>
+        <select value={sortKey} onChange={e=>setSortKey(e.target.value)}
+          className="rounded-lg border border-slate-200 bg-white px-2 py-2.5 text-sm text-slate-600 focus:outline-none shrink-0">
+          <option value="updated">更新順</option>
+          <option value="reward">報酬高い順</option>
+          <option value="deadline">納期近い順</option>
+        </select>
+      </div>
       <div className="mb-4 flex flex-wrap gap-2">
         {STATUS_GROUPS.map(g => {
           const cnt = g.statuses ? opps.filter(o=>g.statuses.includes(o.status)).length : opps.length;
@@ -857,6 +907,157 @@ function OppDetailScreen({ id }) {
 
       {showEdit && <OppForm initial={opp} onClose={()=>setShowEdit(false)} onSaved={()=>{setShowEdit(false);load();}}/>}
     </>
+  );
+}
+
+// ─── SKILL RUNNER ─────────────────────────────────────────
+function SkillRunner({ skill, onClose }) {
+  const { sb, user } = useApp();
+  const [source, setSource] = useState('');
+  const [extra, setExtra] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [reply, setReply] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const generate = () => {
+    if (!source.trim()) return;
+    const tpl = skill.prompt_template
+      ? `## Skillテンプレート（${skill.name}）
+${skill.prompt_template}
+
+`
+      : `## Skill: ${skill.name}
+用途：${skill.purpose || ''}
+出力形式：${skill.output_format || ''}
+
+`;
+    const extraPart = extra.trim() ? `
+## 補足・追加指示
+${extra}` : '';
+    setPrompt(`${tpl}## 元テキスト・依頼内容
+${source}${extraPart}`);
+  };
+  const copy = async () => { try { await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(()=>setCopied(false),1500); } catch(e){} };
+  const save = async () => {
+    if (!reply.trim()) return;
+    setSaving(true);
+    await sb.from('skills').update({ usage_count: (skill.usage_count||0)+1, last_used_at: new Date().toISOString().split('T')[0] }).eq('id', skill.id).eq('user_id', user.id);
+    setSaving(false); setSaved(true);
+  };
+
+  return (
+    <FullModal title={`▶ ${skill.name}`} onClose={onClose}>
+      <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-3 space-y-0.5">
+        <div className="text-sm font-semibold text-indigo-800">{skill.name}</div>
+        {skill.purpose && <div className="text-xs text-indigo-600">{skill.purpose}</div>}
+        {skill.output_format && <div className="text-xs text-slate-500">出力：{skill.output_format}</div>}
+        {skill.prompt_template && <div className="text-xs text-emerald-600">📋 テンプレートあり</div>}
+      </div>
+      <Txta label="元テキスト・依頼内容" required rows={6} value={source} onChange={e=>setSource(e.target.value)}
+        placeholder="加工・変換したい文面、メモ、情報などを貼り付けてください"/>
+      <Txta label="補足・追加指示（任意）" rows={2} value={extra} onChange={e=>setExtra(e.target.value)}
+        placeholder="例：丁寧なトーンで / 箇条書きで / 〇〇を強調して"/>
+      <Btn variant="outline" onClick={generate} disabled={!source.trim()}><WandIcon size={14}/> プロンプト生成</Btn>
+      {prompt && (
+        <>
+          <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <textarea readOnly value={prompt} rows={7} className="w-full rounded-lg border border-slate-100 bg-slate-50 p-3 font-mono text-xs leading-relaxed"/>
+            <div className="mt-2 flex justify-end">
+              <Btn variant="secondary" size="sm" onClick={copy}>{copied?<><CheckIcon size={14}/> コピー済み</>:<><CopyIcon size={14}/> Claudeにコピー</>}</Btn>
+            </div>
+          </div>
+          <Txta label="Claudeの出力を貼り付け" rows={6} value={reply} onChange={e=>{setReply(e.target.value);setSaved(false);}}
+            placeholder="Claudeが生成した出力をここに貼り付けます"/>
+          <div className="flex items-center justify-end gap-3">
+            {saved && <span className="text-xs text-emerald-600">使用回数を記録しました</span>}
+            <Btn size="sm" disabled={!reply.trim()||saving} onClick={save}><SaveIcon size={14}/> 記録する</Btn>
+          </div>
+        </>
+      )}
+    </FullModal>
+  );
+}
+
+// ─── SKILL SMART RUN ──────────────────────────────────────
+function SkillSmartRun({ skills, onClose }) {
+  const { sb, user } = useApp();
+  const [source, setSource] = useState('');
+  const [goal, setGoal] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [reply, setReply] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const generate = () => {
+    if (!source.trim() || !goal.trim()) return;
+    const skillList = skills.length > 0
+      ? skills.map(s => `- ${s.name}：${s.purpose||'（用途未設定）'}　出力：${s.output_format||'（未設定）'}`).join('
+')
+      : '（まだSkillが登録されていません）';
+    setPrompt(`# Smart Run
+
+## 登録済みSkillライブラリ
+${skillList}
+
+## 元テキスト
+${source}
+
+## 作りたいもの
+${goal}
+
+## 依頼内容
+1. 上記Skillライブラリの中から最も適切なSkillを1つ選んでください
+2. 選んだSkillを使って、元テキストから「作りたいもの」を実際に出力してください
+3. 出力の先頭に「使用Skill：〇〇」と一行書いてから本文を出力してください
+4. 適合するSkillがない場合は「該当Skillなし・汎用対応」と書いてから最善の出力をしてください`);
+  };
+  const copy = async () => { try { await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(()=>setCopied(false),1500); } catch(e){} };
+  const saveToKnowledge = async () => {
+    if (!reply.trim()) return;
+    setSaving(true);
+    await sb.from('knowledge_items').insert({ user_id: user.id, title: `Smart Run：${goal.slice(0,30)}`, category: 'general', content: `## 元テキスト
+${source}
+
+## やりたいこと
+${goal}
+
+## 出力
+${reply}`, tags: ['SmartRun'], source_ref: 'Nexus Smart Run' });
+    setSaving(false); setSaved(true);
+  };
+
+  return (
+    <FullModal title="⚡ Smart Run" onClose={onClose}>
+      <p className="rounded-lg bg-amber-50 border border-amber-100 p-3 text-xs leading-relaxed text-amber-700">
+        文面を貼って「何を作りたいか」を書くだけ。ClaudeがSkillライブラリの中から最適なSkillを選んで実行します。
+      </p>
+      <Txta label="元テキスト" required rows={6} value={source} onChange={e=>setSource(e.target.value)}
+        placeholder="加工・変換したい文面、メモ、情報などを貼り付けてください"/>
+      <Inp label="何を作りたいか" required value={goal} onChange={e=>setGoal(e.target.value)}
+        placeholder="例：共有文にしたい / 提案書のたたきを作りたい / 議事録にしたい"/>
+      <Btn variant="outline" onClick={generate} disabled={!source.trim()||!goal.trim()}><WandIcon size={14}/> プロンプト生成</Btn>
+      {prompt && (
+        <>
+          <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <textarea readOnly value={prompt} rows={9} className="w-full rounded-lg border border-slate-100 bg-slate-50 p-3 font-mono text-xs leading-relaxed"/>
+            <div className="mt-2 flex justify-end">
+              <Btn variant="secondary" size="sm" onClick={copy}>{copied?<><CheckIcon size={14}/> コピー済み</>:<><CopyIcon size={14}/> Claudeにコピー</>}</Btn>
+            </div>
+          </div>
+          <Txta label="Claudeの出力を貼り付け（ナレッジ保存する場合）" rows={6} value={reply} onChange={e=>{setReply(e.target.value);setSaved(false);}}
+            placeholder="Claudeが生成した出力をここに貼り付けると、ナレッジに保存できます（任意）"/>
+          <div className="flex items-center justify-end gap-3">
+            {saved && <span className="text-xs text-emerald-600">ナレッジに保存しました</span>}
+            <Btn size="sm" variant="secondary" disabled={!reply.trim()||saving} onClick={saveToKnowledge}>
+              <SaveIcon size={14}/> ナレッジに保存
+            </Btn>
+          </div>
+        </>
+      )}
+    </FullModal>
   );
 }
 
@@ -1019,7 +1220,8 @@ function normalizeSkill(d, userId) {
 // ─── SKILL ACTION MENU (bottom sheet) ─────────────────────
 function SkillActionMenu({ onPick, onClose }) {
   const items = [
-    { key:'manual',    icon:'✍️', label:'手動で作成',          desc:'フォームに直接入力' },
+    { key:'smartrun',  icon:'⚡', label:'Smart Run',            desc:'文面を貼るだけ・Skillは自動選択' },
+    { key:'manual',    icon:'✍️', label:'手動で作成',           desc:'フォームに直接入力' },
     { key:'builder',   icon:'✨', label:'Skill Builder',        desc:'やりたいことからAIが下書き' },
     { key:'import',    icon:'📥', label:'JSONから一括登録',     desc:'まとめて取り込む' },
     { key:'incubator', icon:'🌱', label:'Skill Incubator',      desc:'活動からSkill候補を提案' },
@@ -1302,8 +1504,9 @@ function SkillsScreen() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [editing, setEditing] = useState(null);
+  const [runningSkill, setRunningSkill] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
-  const [modal, setModal] = useState(null); // manual|builder|import|export|incubator|category
+  const [modal, setModal] = useState(null); // manual|builder|import|export|incubator|category|smartrun
 
   const load = async () => {
     setLoading(true);
@@ -1344,7 +1547,12 @@ function SkillsScreen() {
   return (
     <>
       <PageHeader title="Skill" subtitle={`${skills.length}件 / 社内転用 ${skills.filter(s=>s.reusable_internally).length}件`}
-        action={<Btn size="sm" onClick={()=>setShowMenu(true)}><PlusIcon size={14}/> 追加</Btn>}/>
+        action={
+          <div className="flex gap-2">
+            <Btn variant="outline" size="sm" onClick={()=>setModal('smartrun')} title="Smart Run">⚡</Btn>
+            <Btn size="sm" onClick={()=>setShowMenu(true)}><PlusIcon size={14}/> 追加</Btn>
+          </div>
+        }/>
       {err && <ErrState error={err}/>}
       {skills.length === 0
         ? <EmptyState message="まだSkillがありません" action={<Btn size="sm" variant="secondary" onClick={()=>setShowMenu(true)}>最初のSkillを登録</Btn>}/>
@@ -1361,6 +1569,7 @@ function SkillsScreen() {
                       {sk.reusable_internally && <Badge tone="amber"><Repeat2Icon size={11} className="mr-0.5"/>社内</Badge>}
                     </div>
                     <div className="flex gap-1 shrink-0">
+                      <button onClick={()=>setRunningSkill(sk)} title="実行" className="rounded p-1 text-slate-400 hover:bg-amber-50 hover:text-amber-600"><PlayIcon size={14}/></button>
                       <button onClick={()=>recordUsage(sk)} title="使用を記録（✓）" className="rounded p-1 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600"><CheckIcon size={14}/></button>
                       <button onClick={()=>duplicate(sk)} title="複製" className="rounded p-1 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Repeat2Icon size={14}/></button>
                       <button onClick={()=>{setEditing(sk);setModal('manual');}} className="rounded p-1 text-slate-400 hover:bg-slate-100"><EditIcon size={14}/></button>
@@ -1380,12 +1589,14 @@ function SkillsScreen() {
           </div>
         )}
       {showMenu && <SkillActionMenu onClose={()=>setShowMenu(false)} onPick={(k)=>{setShowMenu(false); if(k==='manual'){setEditing(null);} setModal(k);}}/>}
+      {modal==='smartrun' && <SkillSmartRun skills={skills} onClose={()=>setModal(null)}/>}
       {modal==='manual' && <SkillForm initial={editing} categories={categories} onClose={()=>{setModal(null);setEditing(null);}} onSaved={()=>{setModal(null);setEditing(null);load();}}/>}
       {modal==='builder' && <SkillBuilder categories={categories} onClose={()=>setModal(null)} onSaved={()=>{setModal(null);load();}}/>}
       {modal==='import' && <SkillImport onClose={()=>setModal(null)} onSaved={()=>{setModal(null);load();}}/>}
       {modal==='export' && <SkillExport onClose={()=>setModal(null)}/>}
       {modal==='incubator' && <SkillIncubator onClose={()=>setModal(null)}/>}
       {modal==='category' && <SkillCategoryManager onClose={()=>{setModal(null);load();}}/>}
+      {runningSkill && <SkillRunner skill={runningSkill} onClose={()=>setRunningSkill(null)}/>}
     </>
   );
 }
@@ -1672,16 +1883,74 @@ function ScheduleScreen() {
   );
 }
 
+// ─── MONTHLY REVIEW BRIDGE ────────────────────────────────
+function buildMonthlyReviewPrompt(opps, skills, month) {
+  const applied = opps.filter(o=>!['candidate','analyzing'].includes(o.status)).length;
+  const orders = opps.filter(o=>['won','in_progress','awaiting_delivery','delivered','done','revision'].includes(o.status)).length;
+  const revenue = opps.filter(o=>['delivered','done'].includes(o.status)).reduce((s,o)=>s+o.reward_amount,0);
+  const active = opps.filter(o=>['won','in_progress','awaiting_delivery','revision'].includes(o.status));
+  const winRate = applied>0 ? Math.round(orders/applied*100) : 0;
+  const oppList = opps.slice(0,10).map(o=>`- ${o.title}（${STATUS_META[o.status]?.label||o.status}・${fmtYen(o.reward_amount)}）`).join('\n') || '（なし）';
+  const skillList = skills.slice(0,5).map(s=>`- ${s.name}（使用${s.usage_count||0}回）`).join('\n') || '（未登録）';
+  return `# 月次レビュー依頼（${month.replace('-','年')}月）\n\n## 今月の数字\n- 案件総数: ${opps.length}件\n- 応募: ${applied}件 / 受注: ${orders}件 / 受注率: ${winRate}%\n- 完了売上: ${fmtYen(revenue)}\n- 稼働中: ${active.length}件\n\n## 直近の案件一覧\n${oppList}\n\n## よく使うSkill（上位5）\n${skillList}\n\n## 依頼内容\n上記データをもとに以下の構成で月次振り返りレポートを作成してください。\n\n### 1. 今月の成果（数字と具体的な案件）\n### 2. 良かった点・再現したいこと\n### 3. 課題・改善点\n### 4. 来月の目標と行動計画（具体的な数字で）\n### 5. Skill・ナレッジで強化すべき点\n\n「本橋さん自身の言葉で振り返った」ような文体で、Nexusのナレッジとして保存できる形式でお願いします。`;
+}
+function MonthlyReviewBridge({ opps, skills }) {
+  const { sb, user } = useApp();
+  const now = new Date();
+  const month = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const [prompt, setPrompt] = useState('');
+  const [reply, setReply] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const generate = () => setPrompt(buildMonthlyReviewPrompt(opps, skills, month));
+  const copy = async () => { try { await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(()=>setCopied(false),1500); } catch(e){} };
+  const save = async () => {
+    if (!reply.trim()) return;
+    setSaving(true);
+    await sb.from('knowledge_items').insert({ user_id: user.id, title: `月次レビュー ${month.replace('-','年')}月`, category: 'general', content: reply, tags: ['月次レビュー', month], source_ref: 'Nexus月次レビュー' });
+    setSaving(false); setSaved(true);
+  };
+  return (
+    <div className="mt-6 rounded-xl border border-indigo-200 bg-indigo-50 p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-indigo-800">月次レビュー</div>
+          <div className="text-xs text-indigo-600">{month.replace('-','年')}月の振り返り → ナレッジに保存</div>
+        </div>
+        <Btn variant="outline" size="sm" onClick={generate} className="border-indigo-300 text-indigo-700 shrink-0"><WandIcon size={14}/> 生成</Btn>
+      </div>
+      {prompt && (
+        <>
+          <textarea readOnly value={prompt} rows={8} className="w-full rounded-lg border border-indigo-200 bg-white p-3 font-mono text-xs leading-relaxed mb-2"/>
+          <div className="mb-3 flex justify-end">
+            <Btn variant="secondary" size="sm" onClick={copy}>{copied?<><CheckIcon size={14}/> コピー済み</>:<><CopyIcon size={14}/> Claudeにコピー</>}</Btn>
+          </div>
+          <Txta label="Claudeの振り返りを貼り付け" rows={6} value={reply} onChange={e=>{setReply(e.target.value);setSaved(false);}} placeholder="Claudeが生成した月次レビューをここに貼り付けます"/>
+          <div className="mt-2 flex items-center justify-end gap-3">
+            {saved && <span className="text-xs text-emerald-600">ナレッジに保存しました</span>}
+            <Btn size="sm" disabled={!reply.trim()||saving} onClick={save}><SaveIcon size={14}/> ナレッジに保存</Btn>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── KPI SCREEN ───────────────────────────────────────────
 function KpiScreen() {
   const { sb, user } = useApp();
   const [opps, setOpps] = useState([]);
+  const [skills, setSkills] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await sb.from('opportunities').select('*').eq('user_id', user.id);
-      setOpps(data||[]); setLoading(false);
+      const [{ data: o }, { data: s }] = await Promise.all([
+        sb.from('opportunities').select('*').eq('user_id', user.id),
+        sb.from('skills').select('name,usage_count').eq('user_id', user.id).order('usage_count', { ascending: false }).limit(10),
+      ]);
+      setOpps(o||[]); setSkills(s||[]); setLoading(false);
     };
     load();
   }, []);
@@ -1752,6 +2021,7 @@ function KpiScreen() {
           </div>
         </section>
       )}
+      <MonthlyReviewBridge opps={opps} skills={skills}/>
     </>
   );
 }
@@ -1790,9 +2060,19 @@ function SettingsScreen() {
           <p className="mb-4 font-mono text-xs text-slate-700 break-all">{cfg.key ? cfg.key.slice(0,20)+'...' : '—'}</p>
           <Btn variant="danger" size="sm" onClick={resetCfg}>設定をリセット</Btn>
         </div>
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-5">
+          <h3 className="mb-3 text-sm font-semibold text-indigo-800">📱 ホーム画面に追加（PWA）</h3>
+          <p className="mb-3 text-xs leading-relaxed text-indigo-700">アプリアイコンとしてホーム画面に追加すると、フルスクリーンで起動できます。</p>
+          <ol className="space-y-1.5 text-xs text-indigo-700">
+            <li>1. SafariでNexusを開いた状態で下部の共有ボタン（□↑）をタップ</li>
+            <li>2.「ホーム画面に追加」を選択</li>
+            <li>3. 名前は「Nexus」のまま「追加」をタップ</li>
+            <li>4. ホーム画面にインディゴのNアイコンが追加されます</li>
+          </ol>
+        </div>
         <div className="rounded-xl border border-slate-200 bg-white p-5">
           <h3 className="mb-2 text-sm font-semibold text-slate-700">バージョン情報</h3>
-          <p className="text-xs text-slate-400">Nexus v1.0 — Single HTML + Supabase</p>
+          <p className="text-xs text-slate-400">Nexus v1.1 — Single HTML + Supabase</p>
           <p className="text-xs text-slate-400">将来的に Next.js へ移行予定</p>
         </div>
       </div>
