@@ -994,63 +994,149 @@ ${source}${extraPart}`);
 }
 
 // ─── SKILL SMART RUN ──────────────────────────────────────
+// ─── SKILL MATCHING (local scoring) ───────────────────────
+function tokenizeJa(text) {
+  // 日本語向けの簡易トークン化：記号で分割しつつ2gramも生成
+  const cleaned = (text||'').toLowerCase().replace(/[、。・，．\n\r\t/（）()「」\[\]｛｝【】！!?？:：;；]/g, ' ');
+  const words = cleaned.split(/\s+/).filter(w => w.length >= 2);
+  const grams = [];
+  const compact = cleaned.replace(/\s+/g, '');
+  for (let i = 0; i < compact.length - 1; i++) grams.push(compact.slice(i, i+2));
+  return { words, grams: grams.filter(g => g.trim().length === 2) };
+}
+function scoreSkill(skill, input) {
+  const inTok = tokenizeJa(input);
+  const inSet = new Set([...inTok.words, ...inTok.grams]);
+  // 重み：name > purpose > category > notes
+  const fields = [
+    { text: skill.name, w: 3.0 },
+    { text: skill.purpose, w: 2.0 },
+    { text: skill.category, w: 1.5 },
+    { text: skill.notes, w: 1.0 },
+    { text: skill.output_format, w: 0.8 },
+  ];
+  let score = 0;
+  const hits = [];
+  fields.forEach(f => {
+    if (!f.text) return;
+    const fTok = tokenizeJa(f.text);
+    const fSet = new Set([...fTok.words, ...fTok.grams]);
+    let fieldHit = 0;
+    fSet.forEach(t => { if (inSet.has(t)) fieldHit++; });
+    if (fieldHit > 0) {
+      score += fieldHit * f.w;
+      // 直接含有のボーナス（名前や用途に入力語がそのまま含まれる）
+      inTok.words.forEach(w => { if ((f.text||'').toLowerCase().includes(w)) { score += f.w; hits.push(w); } });
+    }
+  });
+  // 使用回数を軽く加点（実績のあるSkillを優先）
+  score += Math.min(skill.usage_count || 0, 10) * 0.1;
+  return { score, hits: [...new Set(hits)] };
+}
+function rankSkills(skills, input) {
+  return skills
+    .map(s => ({ skill: s, ...scoreSkill(s, input) }))
+    .sort((a, b) => b.score - a.score);
+}
+
+// ─── SKILL SMART RUN (auto-select) ────────────────────────
 function SkillSmartRun({ skills, onClose }) {
   const { sb, user } = useApp();
   const [source, setSource] = useState('');
   const [goal, setGoal] = useState('');
+  const [ranked, setRanked] = useState(null);
+  const [chosenId, setChosenId] = useState(null);
   const [prompt, setPrompt] = useState('');
   const [reply, setReply] = useState('');
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const generate = () => {
-    if (!source.trim() || !goal.trim()) return;
-    const skillList = skills.length > 0
-      ? skills.map(s => `- ${s.name}：${s.purpose||'（用途未設定）'}　出力：${s.output_format||'（未設定）'}`).join('\n')
-      : '（まだSkillが登録されていません）';
-    setPrompt(`# Smart Run
-
-## 登録済みSkillライブラリ
-${skillList}
-
-## 元テキスト
-${source}
-
-## 作りたいもの
-${goal}
-
-## 依頼内容
-1. 上記Skillライブラリの中から最も適切なSkillを1つ選んでください
-2. 選んだSkillを使って、元テキストから「作りたいもの」を実際に出力してください
-3. 出力の先頭に「使用Skill：〇〇」と一行書いてから本文を出力してください
-4. 適合するSkillがない場合は「該当Skillなし・汎用対応」と書いてから最善の出力をしてください`);
+  const analyze = () => {
+    if (!goal.trim()) return;
+    const query = goal + ' ' + source;
+    const r = rankSkills(skills, query);
+    setRanked(r);
+    setChosenId(r.length > 0 && r[0].score > 0 ? r[0].skill.id : null);
+    setPrompt(''); setReply(''); setSaved(false);
   };
+
+  const chosen = ranked && chosenId ? ranked.find(x => x.skill.id === chosenId) : null;
+  const top = ranked && ranked.length > 0 ? ranked[0] : null;
+
+  const buildReason = (entry) => {
+    if (!entry) return '';
+    const s = entry.skill;
+    const matched = entry.hits.length > 0 ? `「${entry.hits.slice(0,4).join('・')}」との一致` : '用途の近さ';
+    return `${matched}により、${s.category||'用途'}カテゴリの「${s.name}」が最も適合すると判断しました。${s.purpose ? '（用途：'+s.purpose+'）' : ''}`;
+  };
+
+  const generate = () => {
+    if (!chosen) return;
+    const s = chosen.skill;
+    const tpl = s.prompt_template
+      ? `## Skillテンプレート（${s.name}）\n${s.prompt_template}\n\n`
+      : `## Skill: ${s.name}\n用途：${s.purpose||''}\n出力形式：${s.output_format||''}\n\n`;
+    setPrompt(`${tpl}## 入力（やりたいこと）\n${goal}\n\n## 元テキスト\n${source||'（なし）'}\n\n## 依頼\n上記Skillに従って成果物を作成してください。出力の冒頭に「使用Skill：${s.name}」と記載してください。`);
+  };
+
   const copy = async () => { try { await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(()=>setCopied(false),1500); } catch(e){} };
-  const saveToKnowledge = async () => {
-    if (!reply.trim()) return;
+
+  const save = async () => {
+    if (!reply.trim() || !chosen) return;
     setSaving(true);
-    await sb.from('knowledge_items').insert({ user_id: user.id, title: `Smart Run：${goal.slice(0,30)}`, category: 'general', content: `## 元テキスト
-${source}
-
-## やりたいこと
-${goal}
-
-## 出力
-${reply}`, tags: ['SmartRun'], source_ref: 'Nexus Smart Run' });
+    const s = chosen.skill;
+    await sb.from('skills').update({ usage_count: (s.usage_count||0)+1, last_used_at: new Date().toISOString().split('T')[0] }).eq('id', s.id).eq('user_id', user.id);
+    await sb.from('knowledge_items').insert({ user_id: user.id, title: `Smart Run：${goal.slice(0,30)}`, category: 'general', content: `## やりたいこと\n${goal}\n\n## 元テキスト\n${source}\n\n## 使用Skill\n${s.name}\n\n## 出力\n${reply}`, tags: ['SmartRun', s.name], source_ref: 'Nexus Smart Run' });
     setSaving(false); setSaved(true);
   };
 
   return (
     <FullModal title="⚡ Smart Run" onClose={onClose}>
       <p className="rounded-lg bg-amber-50 border border-amber-100 p-3 text-xs leading-relaxed text-amber-700">
-        文面を貼って「何を作りたいか」を書くだけ。ClaudeがSkillライブラリの中から最適なSkillを選んで実行します。
+        やりたいことを入力すると、Nexusが登録済みSkillから最適なものを自動で選びます。選択理由を確認して、そのまま実行できます。
       </p>
-      <Txta label="元テキスト" required rows={6} value={source} onChange={e=>setSource(e.target.value)}
-        placeholder="加工・変換したい文面、メモ、情報などを貼り付けてください"/>
-      <Inp label="何を作りたいか" required value={goal} onChange={e=>setGoal(e.target.value)}
-        placeholder="例：共有文にしたい / 提案書のたたきを作りたい / 議事録にしたい"/>
-      <Btn variant="outline" onClick={generate} disabled={!source.trim()||!goal.trim()}><WandIcon size={14}/> プロンプト生成</Btn>
+      <Inp label="何を作りたいか" required value={goal} onChange={e=>{setGoal(e.target.value);setRanked(null);}}
+        placeholder="例：飯島さんの面談内容を共有文にしたい / 数値の課題を分析したい"/>
+      <Txta label="元テキスト（任意）" rows={5} value={source} onChange={e=>{setSource(e.target.value);setRanked(null);}}
+        placeholder="共有したい文面・メモ・数値などがあれば貼り付け"/>
+      <Btn variant="outline" onClick={analyze} disabled={!goal.trim()}><WandIcon size={14}/> 最適Skillを判定</Btn>
+
+      {ranked && (
+        ranked.length === 0 || !top || top.score === 0 ? (
+          <ErrState error="一致するSkillが見つかりませんでした。Skillを登録するか、表現を変えてみてください。"/>
+        ) : (
+          <div className="space-y-3">
+            {/* 自動選択結果 */}
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+              <div className="text-xs font-medium text-indigo-500">使用Skill（自動選択）</div>
+              <div className="mt-0.5 text-base font-bold text-indigo-800">{chosen?.skill.name}</div>
+              <div className="mt-2 text-xs font-medium text-indigo-500">選択理由</div>
+              <div className="mt-0.5 text-sm text-slate-700">{buildReason(chosen)}</div>
+            </div>
+
+            {/* 候補の切り替え（上位3件） */}
+            {ranked.filter(r=>r.score>0).length > 1 && (
+              <div>
+                <div className="mb-1.5 text-xs text-slate-500">別のSkillに変更</div>
+                <div className="flex flex-wrap gap-2">
+                  {ranked.filter(r=>r.score>0).slice(0,3).map(r => (
+                    <button key={r.skill.id} onClick={()=>{setChosenId(r.skill.id);setPrompt('');}}
+                      className={cn('rounded-full border px-3 py-1.5 text-xs font-medium',
+                        chosenId===r.skill.id ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-200 bg-white text-slate-600')}>
+                      {r.skill.name}
+                      <span className={cn('ml-1.5 font-mono', chosenId===r.skill.id?'text-indigo-200':'text-slate-400')}>{r.score.toFixed(1)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <Btn onClick={generate} disabled={!chosen}><WandIcon size={14}/> このSkillで実行プロンプトを生成</Btn>
+          </div>
+        )
+      )}
+
       {prompt && (
         <>
           <div className="rounded-xl border border-slate-200 bg-white p-3">
@@ -1059,13 +1145,11 @@ ${reply}`, tags: ['SmartRun'], source_ref: 'Nexus Smart Run' });
               <Btn variant="secondary" size="sm" onClick={copy}>{copied?<><CheckIcon size={14}/> コピー済み</>:<><CopyIcon size={14}/> Claudeにコピー</>}</Btn>
             </div>
           </div>
-          <Txta label="Claudeの出力を貼り付け（ナレッジ保存する場合）" rows={6} value={reply} onChange={e=>{setReply(e.target.value);setSaved(false);}}
-            placeholder="Claudeが生成した出力をここに貼り付けると、ナレッジに保存できます（任意）"/>
+          <Txta label="Claudeの出力を貼り付け" rows={6} value={reply} onChange={e=>{setReply(e.target.value);setSaved(false);}}
+            placeholder="Claudeが生成した出力をここに貼り付けます"/>
           <div className="flex items-center justify-end gap-3">
-            {saved && <span className="text-xs text-emerald-600">ナレッジに保存しました</span>}
-            <Btn size="sm" variant="secondary" disabled={!reply.trim()||saving} onClick={saveToKnowledge}>
-              <SaveIcon size={14}/> ナレッジに保存
-            </Btn>
+            {saved && <span className="text-xs text-emerald-600">記録＋ナレッジ保存しました</span>}
+            <Btn size="sm" disabled={!reply.trim()||saving} onClick={save}><SaveIcon size={14}/> 記録してナレッジ保存</Btn>
           </div>
         </>
       )}
