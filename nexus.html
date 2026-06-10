@@ -224,6 +224,8 @@ const FileTextIcon = ({size, className}) => <SvgIcon size={size} className={clas
   d2="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>;
 const XIcon = ({size, className}) => <SvgIcon size={size} className={className}
   d="M18 6L6 18M6 6l12 12"/>;
+const SearchIcon = ({size, className}) => <SvgIcon size={size} className={className}
+  d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>;
 const PlayIcon = ({size, className}) => <SvgIcon size={size} className={className}
   d="M5 3l14 9-14 9V3z"/>;
 
@@ -1979,6 +1981,790 @@ function ScheduleScreen() {
   );
 }
 
+
+// ─── EXPLORE CONSTANTS ────────────────────────────────────
+const JOB_STATUS_META = {
+  candidate:   { label:'候補',     tone:'slate' },
+  analyzing:   { label:'分析中',   tone:'indigo' },
+  apply_cand:  { label:'応募候補', tone:'indigo' },
+  to_apply:    { label:'応募予定', tone:'amber' },
+  applied:     { label:'応募済み', tone:'indigo' },
+  declined:    { label:'見送り',   tone:'slate' },
+  won:         { label:'受注',     tone:'emerald' },
+  working:     { label:'作業中',   tone:'emerald' },
+  delivered:   { label:'納品済み', tone:'emerald' },
+  done:        { label:'完了',     tone:'emerald' },
+};
+const JOB_ANALYSIS_KINDS = {
+  analysis: '案件分析',
+  decision: '応募判断',
+  risk:     'リスク判定',
+  proposal: '提案文作成',
+  question: '質問文作成',
+  estimate: '見積もり作成',
+};
+const PRIORITY_META = {
+  high: { label:'高', tone:'rose' },
+  mid:  { label:'中', tone:'amber' },
+  low:  { label:'低', tone:'slate' },
+};
+const SOURCE_SEEDS = [
+  { name:'クラウドワークス', purpose:'副業案件の主戦場', target_jobs:'議事録作成・文字起こし・要約・文章整理・資料作成・AI補助・データ入力', base_url:'https://crowdworks.jp', search_url_template:'https://crowdworks.jp/public/jobs/search?keyword={keywords}&work_type=0&order=score', fetch_method:'manual_url', priority:'high', sort_order:0 },
+  { name:'ランサーズ',       purpose:'クラウドワークスの比較・補助', target_jobs:'ライティング・タスク作業・事務作業・資料作成・AI活用・業務効率化', base_url:'https://www.lancers.jp', search_url_template:'https://www.lancers.jp/work/search?keyword={keywords}&type=task,project', fetch_method:'manual_url', priority:'high', sort_order:1 },
+  { name:'ココナラ',         purpose:'自分の商品・サービスを出品する', target_jobs:'議事録作成代行・文章整理・教育資料作成・AI活用相談・業務効率化相談', base_url:'https://coconala.com', search_url_template:'https://coconala.com/search?keyword={keywords}', fetch_method:'manual_url', priority:'high', sort_order:2 },
+  { name:'シュフティ',       purpose:'軽めの在宅案件探し', target_jobs:'データ入力・文章整理・簡単な事務作業・在宅タスク', base_url:'https://app.shufti.jp', search_url_template:'https://app.shufti.jp/worker/tasks?keyword={keywords}', fetch_method:'manual_url', priority:'mid', sort_order:3 },
+  { name:'SOKUDAN',          purpose:'高単価・経験活用型の副業案件', target_jobs:'営業・企画・マーケティング・業務改善・AI活用・PM補助', base_url:'https://sokudan.work', search_url_template:'https://sokudan.work/job?keyword={keywords}', fetch_method:'manual_url', priority:'mid', sort_order:4 },
+  { name:'Workship',         purpose:'フリーランス・副業案件探し', target_jobs:'企画・マーケティング・AI活用・業務改善・PM補助', base_url:'https://goworkship.com', search_url_template:'https://goworkship.com/jobs?keyword={keywords}', fetch_method:'manual_url', priority:'mid', sort_order:5 },
+  { name:'複業クラウド',     purpose:'企業系の複業案件探し', target_jobs:'営業企画・教育・組織改善・業務改善・マーケティング', base_url:'https://fukugyo.co.jp', search_url_template:'https://fukugyo.co.jp/search?keyword={keywords}', fetch_method:'manual_url', priority:'mid', sort_order:6 },
+  { name:'YOUTRUST',         purpose:'スカウト・人脈型の副業案件探し', target_jobs:'副業・業務委託・転職候補・営業企画・PM補助', base_url:'https://youtrust.jp', search_url_template:'https://youtrust.jp/jobs?keyword={keywords}', fetch_method:'manual_url', priority:'low', sort_order:7 },
+];
+
+// ─── EXPLORE UTILITIES ────────────────────────────────────
+function generateSearchUrl(source, condition) {
+  if (!source) return '';
+  const tpl = source.search_url_template;
+  if (!tpl) return source.base_url || '';
+  const kw = encodeURIComponent(((condition && condition.keywords) || '').trim());
+  return tpl
+    .replace('{keywords}', kw)
+    .replace('{min_reward}', (condition && condition.min_reward) || 0)
+    .replace('{category}', encodeURIComponent((condition && condition.category) || ''));
+}
+function getRecommendMeta(score) {
+  if (score === null || score === undefined) return { label:'未評価', tone:'slate' };
+  if (score >= 80) return { label:'応募優先',  tone:'emerald' };
+  if (score >= 60) return { label:'条件付き',  tone:'indigo' };
+  if (score >= 40) return { label:'要注意',    tone:'amber' };
+  return                   { label:'見送り推奨', tone:'rose' };
+}
+function computeRecommendScore(fitScore, riskScore, reward) {
+  const base = 50;
+  const rewardBonus = reward >= 50000 ? 15 : reward >= 30000 ? 10 : reward >= 10000 ? 5 : 0;
+  const fit = (fitScore || 0);
+  const risk = (riskScore || 0);
+  return Math.max(0, Math.min(100, base + rewardBonus + fit - risk));
+}
+function buildDuplicateKey(title, clientName) {
+  return ((title || '') + (clientName || '')).replace(/\s/g, '').toLowerCase().slice(0, 60);
+}
+function checkDuplicates(existing, newTitle, newUrl, newClient) {
+  const dups = [];
+  const key = buildDuplicateKey(newTitle, newClient);
+  existing.forEach(c => {
+    if (newUrl && c.url && c.url === newUrl) { dups.push({ id: c.id, title: c.title, reason: 'URL一致' }); return; }
+    if (c.duplicate_key && c.duplicate_key === key) { dups.push({ id: c.id, title: c.title, reason: '案件名・クライアント一致' }); return; }
+    if (newTitle && c.title && newTitle.length > 5 && c.title.includes(newTitle.slice(0, 10))) { dups.push({ id: c.id, title: c.title, reason: '案件名が類似' }); }
+  });
+  return dups;
+}
+
+function buildJobAnalysisPrompt(kind, candidate, skills) {
+  const skillList = skills.length > 0
+    ? skills.filter(s => s.scope !== 'work_only').slice(0, 8).map(s => `- ${s.name}：${s.purpose || ''}`).join('\n')
+    : '（副業Skillが未登録）';
+  const base = `# ${JOB_ANALYSIS_KINDS[kind]}
+## 案件情報
+- 案件名：${candidate.title}
+- 媒体：${candidate.platform}
+- 報酬：¥${(candidate.reward || 0).toLocaleString()}
+- 納期：${candidate.deadline || '未記載'}
+- クライアント：${candidate.client_name || '未記載'}
+
+## 案件本文
+${candidate.raw_text || candidate.description || '（未記載）'}
+
+## 本橋の副業Skill
+${skillList}
+`;
+  const instructions = {
+    analysis: `## 依頼内容
+上記案件を以下の軸で分析してください。
+1. 案件の要求内容と難易度
+2. 本橋Skillとの相性（0-10点）
+3. 報酬の妥当性（0-10点）
+4. 納期・リスクの評価（0-10点）
+5. 総合スコア（100点満点）と判定（応募優先/条件付き/要注意/見送り推奨）
+6. 応募する場合の訴求ポイント`,
+
+    decision: `## 依頼内容
+この案件に応募すべきか判断してください。
+1. 応募判断：応募推奨 / 条件付き応募 / 見送り推奨
+2. 判断理由（3点以内で簡潔に）
+3. 応募する場合の必要準備
+4. 懸念点と対策`,
+
+    risk: `## 依頼内容
+この案件のリスクを洗い出してください。
+1. クライアントリスク（要求の不明確さ、低評価等）
+2. スコープリスク（作業範囲の膨張リスク）
+3. 納期リスク
+4. 報酬リスク（未払い・値下げ交渉等）
+5. 総合リスク評価（高・中・低）`,
+
+    proposal: `## 依頼内容
+この案件への応募文を作成してください。
+構成：挨拶→案件理解→対応できる理由→具体的な進め方→納期目安→修正対応可否→締め
+コピペしてそのまま送れる形式でお願いします。`,
+
+    question: `## 依頼内容
+応募前にクライアントに確認すべき質問を作成してください。
+3〜5問、箇条書きで。コピペして送れる形式でお願いします。`,
+
+    estimate: `## 依頼内容
+この案件の作業見積もりを出してください。
+1. 想定作業時間（時間単位）
+2. 作業内訳
+3. AI活用で削減できる工数
+4. 実質時給換算
+5. 適正報酬の目安`,
+  };
+  return base + (instructions[kind] || '');
+}
+
+// ─── JOB ANALYSIS BRIDGE ──────────────────────────────────
+function JobAnalysisBridge({ kind, candidate, skills, onAnalysisSaved }) {
+  const { sb, user } = useApp();
+  const [prompt, setPrompt] = useState('');
+  const [reply, setReply] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const generate = () => setPrompt(buildJobAnalysisPrompt(kind, candidate, skills));
+  const copy = async () => { try { await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch(e){} };
+  const save = async () => {
+    if (!reply.trim()) return;
+    setSaving(true);
+    const updates = { updated_at: new Date().toISOString() };
+    if (kind === 'analysis') updates.analysis = reply;
+    if (kind === 'proposal') updates.proposal = reply;
+    if (kind === 'decision') updates.application_decision = reply;
+    await sb.from('job_candidates').update(updates).eq('id', candidate.id).eq('user_id', user.id);
+    setSaving(false); setSaved(true);
+    if (onAnalysisSaved) onAnalysisSaved(kind, reply);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-slate-700">{JOB_ANALYSIS_KINDS[kind]}</span>
+        <Btn variant="outline" size="sm" onClick={generate}><WandIcon size={14}/> 生成</Btn>
+      </div>
+      {prompt && (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <textarea readOnly value={prompt} rows={7} className="w-full rounded-lg border border-slate-100 bg-slate-50 p-3 font-mono text-xs leading-relaxed"/>
+          <div className="mt-2 flex justify-end">
+            <Btn variant="secondary" size="sm" onClick={copy}>{copied ? <><CheckIcon size={14}/> コピー済み</> : <><CopyIcon size={14}/> Claudeにコピー</>}</Btn>
+          </div>
+        </div>
+      )}
+      <Txta label="Claudeの回答を貼り付け" rows={5} value={reply} onChange={e => { setReply(e.target.value); setSaved(false); }} placeholder="Claudeの分析結果をここに貼り付けます"/>
+      <div className="flex items-center justify-end gap-3">
+        {saved && <span className="text-xs text-emerald-600">保存しました</span>}
+        <Btn size="sm" disabled={!reply.trim() || saving} onClick={save}><SaveIcon size={14}/> 保存</Btn>
+      </div>
+    </div>
+  );
+}
+
+// ─── SEARCH CONDITION FORM ────────────────────────────────
+const COND_DEFAULTS = { name:'', source_id:'', keywords:'', exclude_keywords:'', category:'', min_reward:0, preferred_reward:0, deadline_condition:'', work_style:'在宅', beginner_friendly:true, continuous_project:false, avoid_conditions:'', priority:'mid', is_active:true };
+
+function SearchConditionForm({ initial, sources, onClose, onSaved }) {
+  const { sb, user } = useApp();
+  const [f, setF] = useState(initial ? { ...initial } : { ...COND_DEFAULTS });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const upd = k => e => setF(v => ({ ...v, [k]: e.target.value }));
+
+  const save = async () => {
+    if (!f.name.trim()) { setErr('検索条件名を入力してください'); return; }
+    setSaving(true);
+    const payload = { ...f, user_id: user.id, min_reward: parseInt(f.min_reward) || 0, preferred_reward: parseInt(f.preferred_reward) || 0 };
+    const { error } = f.id
+      ? await sb.from('search_conditions').update(payload).eq('id', f.id).eq('user_id', user.id)
+      : await sb.from('search_conditions').insert(payload);
+    setSaving(false);
+    if (error) { setErr(error.message); return; }
+    onSaved();
+  };
+
+  return (
+    <FullModal title={f.id ? '検索条件を編集' : '検索条件を作成'} onClose={onClose} onSave={save} saving={saving}>
+      {err && <ErrState error={err}/>}
+      <Inp label="検索条件名" required value={f.name} onChange={upd('name')} placeholder="議事録・文字起こし系"/>
+      <Sel label="対象媒体" value={f.source_id || ''} onChange={upd('source_id')}>
+        <option value="">媒体を選択（任意）</option>
+        {sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+      </Sel>
+      <Txta label="検索キーワード（スペース区切り）" rows={2} value={f.keywords} onChange={upd('keywords')} placeholder="議事録 作成 文字起こし 要約"/>
+      <Txta label="除外キーワード（スペース区切り）" rows={2} value={f.exclude_keywords} onChange={upd('exclude_keywords')} placeholder="電話営業 テレアポ 急募 即日"/>
+      <Inp label="カテゴリ" value={f.category} onChange={upd('category')} placeholder="ライティング / データ入力 など"/>
+      <div className="grid grid-cols-2 gap-3">
+        <Inp label="最低報酬（円）" type="number" value={f.min_reward} onChange={upd('min_reward')}/>
+        <Inp label="希望報酬（円）" type="number" value={f.preferred_reward} onChange={upd('preferred_reward')}/>
+      </div>
+      <Inp label="納期条件" value={f.deadline_condition} onChange={upd('deadline_condition')} placeholder="1週間以上 など"/>
+      <Inp label="作業形式" value={f.work_style} onChange={upd('work_style')} placeholder="在宅 / フルリモート"/>
+      <Txta label="避けたい案件条件" rows={2} value={f.avoid_conditions} onChange={upd('avoid_conditions')} placeholder="電話対応あり / 顔出し必須 など"/>
+      <Sel label="優先度" value={f.priority} onChange={upd('priority')}>
+        <option value="high">高</option>
+        <option value="mid">中</option>
+        <option value="low">低</option>
+      </Sel>
+      <div className="flex flex-wrap gap-4">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={!!f.beginner_friendly} onChange={e => setF(v => ({ ...v, beginner_friendly: e.target.checked }))} className="h-4 w-4 rounded border-slate-300 text-indigo-600"/>
+          初心者向け可
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={!!f.continuous_project} onChange={e => setF(v => ({ ...v, continuous_project: e.target.checked }))} className="h-4 w-4 rounded border-slate-300 text-indigo-600"/>
+          継続案件希望
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={!!f.is_active} onChange={e => setF(v => ({ ...v, is_active: e.target.checked }))} className="h-4 w-4 rounded border-slate-300 text-indigo-600"/>
+          有効
+        </label>
+      </div>
+    </FullModal>
+  );
+}
+
+// ─── SEARCH SOURCE FORM ───────────────────────────────────
+function SearchSourceForm({ initial, onClose, onSaved }) {
+  const { sb, user } = useApp();
+  const [f, setF] = useState(initial || { name:'', purpose:'', target_jobs:'', base_url:'', search_url_template:'', fetch_method:'manual_url', priority:'mid', is_active:true, notes:'' });
+  const [saving, setSaving] = useState(false);
+  const upd = k => e => setF(v => ({ ...v, [k]: e.target.value }));
+  const save = async () => {
+    setSaving(true);
+    const payload = { ...f, user_id: user.id };
+    const { error } = f.id
+      ? await sb.from('search_sources').update(payload).eq('id', f.id).eq('user_id', user.id)
+      : await sb.from('search_sources').insert(payload);
+    setSaving(false);
+    if (!error) onSaved();
+  };
+  return (
+    <FullModal title={f.id ? '媒体を編集' : '媒体を追加'} onClose={onClose} onSave={save} saving={saving}>
+      <Inp label="媒体名" required value={f.name} onChange={upd('name')}/>
+      <Inp label="用途" value={f.purpose} onChange={upd('purpose')}/>
+      <Inp label="対象案件" value={f.target_jobs} onChange={upd('target_jobs')}/>
+      <Inp label="トップURL" type="url" value={f.base_url} onChange={upd('base_url')} placeholder="https://crowdworks.jp"/>
+      <Txta label="検索URLテンプレート" rows={2} value={f.search_url_template} onChange={upd('search_url_template')} placeholder="https://example.com/search?keyword={keywords}"/>
+      <p className="text-xs text-slate-400">プレースホルダ：{'{keywords}'} {'{min_reward}'} {'{category}'}</p>
+      <Sel label="優先度" value={f.priority} onChange={upd('priority')}>
+        <option value="high">高</option><option value="mid">中</option><option value="low">低</option>
+      </Sel>
+      <Txta label="メモ" rows={2} value={f.notes} onChange={upd('notes')}/>
+      <label className="flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" checked={!!f.is_active} onChange={e => setF(v => ({ ...v, is_active: e.target.checked }))} className="h-4 w-4 rounded border-slate-300 text-indigo-600"/>
+        有効
+      </label>
+    </FullModal>
+  );
+}
+
+// ─── JOB CANDIDATE FORM (paste + save) ────────────────────
+function JobCandidateForm({ sourceId, conditionId, sources, onClose, onSaved }) {
+  const { sb, user } = useApp();
+  const [rawText, setRawText] = useState('');
+  const [f, setF] = useState({ title:'', platform:'', url:'', client_name:'', reward:0, deadline:'', description:'', requirements:'', deliverable:'', concerns:'' });
+  const [dups, setDups] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const upd = k => e => setF(v => ({ ...v, [k]: e.target.value }));
+  const src = sources.find(s => s.id === sourceId);
+
+  const checkDups = async () => {
+    const { data } = await sb.from('job_candidates').select('id,title,url,duplicate_key').eq('user_id', user.id).eq('source_id', sourceId).limit(200);
+    if (data) setDups(checkDuplicates(data, f.title, f.url, f.client_name));
+  };
+
+  const save = async () => {
+    if (!f.title.trim()) { setErr('案件名を入力してください'); return; }
+    setSaving(true);
+    await checkDups();
+    const recScore = computeRecommendScore(null, null, parseInt(f.reward) || 0);
+    const payload = {
+      ...f, user_id: user.id,
+      source_id: sourceId || null,
+      search_condition_id: conditionId || null,
+      platform: src ? src.name : f.platform,
+      reward: parseInt(f.reward) || 0,
+      raw_text: rawText,
+      status: 'candidate',
+      recommend_score: recScore,
+      duplicate_key: buildDuplicateKey(f.title, f.client_name),
+    };
+    const { error } = await sb.from('job_candidates').insert(payload);
+    setSaving(false);
+    if (error) { setErr(error.message); return; }
+    onSaved();
+  };
+
+  return (
+    <FullModal title="案件を登録" onClose={onClose} onSave={save} saving={saving} saveLabel="候補として保存">
+      {err && <ErrState error={err}/>}
+      {dups.length > 0 && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+          <div className="text-xs font-medium text-amber-700">類似案件が登録済みです</div>
+          {dups.map((d, i) => <div key={i} className="text-xs text-amber-600">{d.reason}：{d.title}</div>)}
+        </div>
+      )}
+      <Txta label="元の案件文を貼り付け（案件サイトからコピー）" rows={8} value={rawText} onChange={e => setRawText(e.target.value)} placeholder="案件ページの本文をそのままここに貼り付けてください"/>
+      <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 space-y-3">
+        <p className="text-xs font-medium text-slate-600">案件情報（手動入力・必要な項目だけでOK）</p>
+        <Inp label="案件名" required value={f.title} onChange={upd('title')} placeholder="【在宅】議事録作成のお仕事"/>
+        <div className="grid grid-cols-2 gap-3">
+          <Inp label="報酬（円）" type="number" value={f.reward} onChange={upd('reward')}/>
+          <Inp label="納期" value={f.deadline} onChange={upd('deadline')} placeholder="1週間以内"/>
+        </div>
+        <Inp label="クライアント名" value={f.client_name} onChange={upd('client_name')}/>
+        <Inp label="案件URL" type="url" value={f.url} onChange={upd('url')} placeholder="https://crowdworks.jp/..."/>
+        <Txta label="仕事内容（要約）" rows={3} value={f.description} onChange={upd('description')}/>
+        <Txta label="気になる点・懸念事項" rows={2} value={f.concerns} onChange={upd('concerns')}/>
+      </div>
+    </FullModal>
+  );
+}
+
+// ─── SEARCH RUN SCREEN ────────────────────────────────────
+function SearchRunScreen({ conditionId }) {
+  const { sb, user, back, nav } = useApp();
+  const [condition, setCondition] = useState(null);
+  const [source, setSource] = useState(null);
+  const [sources, setSources] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [genUrl, setGenUrl] = useState('');
+  const [showPaste, setShowPaste] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      const [{ data: c }, { data: s }] = await Promise.all([
+        sb.from('search_conditions').select('*').eq('id', conditionId).single(),
+        sb.from('search_sources').select('*').eq('user_id', user.id).order('sort_order'),
+      ]);
+      setCondition(c); setSources(s || []);
+      if (c && c.source_id) {
+        const src = (s || []).find(x => x.id === c.source_id);
+        setSource(src || null);
+        if (src) setGenUrl(generateSearchUrl(src, c));
+      }
+      await sb.from('search_conditions').update({ last_run_at: new Date().toISOString() }).eq('id', conditionId);
+      setLoading(false);
+    };
+    load();
+  }, [conditionId]);
+
+  const openUrl = () => { if (genUrl) window.open(genUrl, '_blank'); };
+
+  if (loading) return <LoadingState/>;
+  if (!condition) return <ErrState error="検索条件が見つかりませんでした"/>;
+
+  return (
+    <>
+      <PageHeader title="案件を探す" onBack={back}/>
+      <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold text-slate-800">{condition.name}</div>
+            <div className="text-xs text-slate-500">{source ? source.name : '媒体未設定'}</div>
+          </div>
+          <Badge tone={PRIORITY_META[condition.priority]?.tone || 'slate'}>{PRIORITY_META[condition.priority]?.label || condition.priority}</Badge>
+        </div>
+        {condition.keywords && (
+          <div className="text-xs text-slate-600">
+            <span className="font-medium">検索KW：</span>{condition.keywords}
+            {condition.exclude_keywords && <span className="ml-2 text-slate-400">除外：{condition.exclude_keywords}</span>}
+          </div>
+        )}
+        {condition.min_reward > 0 && <div className="text-xs text-slate-600"><span className="font-medium">最低報酬：</span>{fmtYen(condition.min_reward)}</div>}
+      </div>
+
+      <section className="mb-5">
+        <SectionTitle>検索URL</SectionTitle>
+        {genUrl ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+            <p className="break-all rounded bg-slate-50 p-2 font-mono text-xs text-slate-600">{genUrl}</p>
+            <Btn className="w-full" onClick={openUrl}>外部サイトを開く →</Btn>
+            <p className="text-center text-xs text-slate-400">案件を見つけたら「案件を登録」で貼り付けてください</p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-white p-4">
+            <p className="text-sm text-slate-500">検索条件に媒体・キーワードを設定するとURLが生成されます</p>
+            {source && <p className="mt-2 text-xs text-slate-400">媒体トップ：<a href={source.base_url} target="_blank" className="text-indigo-600 underline">{source.base_url}</a></p>}
+          </div>
+        )}
+      </section>
+
+      <Btn className="w-full" variant="secondary" onClick={() => setShowPaste(true)}>
+        <PlusIcon size={14}/> 気になる案件を登録する
+      </Btn>
+
+      {showPaste && (
+        <JobCandidateForm
+          sourceId={condition.source_id}
+          conditionId={conditionId}
+          sources={sources}
+          onClose={() => setShowPaste(false)}
+          onSaved={() => { setShowPaste(false); nav('candidates'); }}
+        />
+      )}
+    </>
+  );
+}
+
+// ─── JOB CANDIDATE LIST ───────────────────────────────────
+function JobCandidateListScreen() {
+  const { sb, user, nav } = useApp();
+  const [candidates, setCandidates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
+
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await sb.from('job_candidates').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+      setCandidates(data || []);
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const FILTER_GROUPS = [
+    { key:'all',      label:'すべて',   statuses: null },
+    { key:'active',   label:'検討中',   statuses: ['candidate','analyzing','apply_cand','to_apply'] },
+    { key:'applied',  label:'応募済み', statuses: ['applied','won','working','delivered','done'] },
+    { key:'declined', label:'見送り',   statuses: ['declined'] },
+  ];
+
+  const filtered = useMemo(() => {
+    const g = FILTER_GROUPS.find(x => x.key === filter);
+    return g && g.statuses ? candidates.filter(c => g.statuses.includes(c.status)) : candidates;
+  }, [candidates, filter]);
+
+  if (loading) return <LoadingState/>;
+  return (
+    <>
+      <PageHeader title="案件候補" subtitle={`${candidates.length}件`}
+        action={<Btn size="sm" onClick={() => nav('searchExplore')}><PlusIcon size={14}/> 探索する</Btn>}/>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {FILTER_GROUPS.map(g => {
+          const cnt = g.statuses ? candidates.filter(c => g.statuses.includes(c.status)).length : candidates.length;
+          return (
+            <button key={g.key} onClick={() => setFilter(g.key)}
+              className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors',
+                filter === g.key ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-200 bg-white text-slate-600')}>
+              {g.label}<span className={cn('font-mono text-xs', filter === g.key ? 'text-indigo-100' : 'text-slate-400')}>{cnt}</span>
+            </button>
+          );
+        })}
+      </div>
+      {filtered.length === 0
+        ? <EmptyState message="案件候補がありません" action={<Btn size="sm" variant="secondary" onClick={() => nav('searchExplore')}>案件を探す</Btn>}/>
+        : (
+          <div className="space-y-2.5">
+            {filtered.map(c => {
+              const rec = getRecommendMeta(c.recommend_score);
+              const st = JOB_STATUS_META[c.status] || { label: c.status, tone: 'slate' };
+              return (
+                <button key={c.id} onClick={() => nav('candidateDetail', { id: c.id })}
+                  className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-slate-300 hover:shadow-sm transition-all">
+                  <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                    <Badge tone={st.tone}>{st.label}</Badge>
+                    <Badge tone={rec.tone}>{rec.label}</Badge>
+                    <span className="text-xs text-slate-400">{c.platform}</span>
+                  </div>
+                  <div className="truncate text-sm font-semibold text-slate-900">{c.title}</div>
+                  <div className="mt-1.5 flex items-center gap-4 text-xs text-slate-500">
+                    <span className="font-mono font-semibold text-slate-700">{fmtYen(c.reward)}</span>
+                    {c.deadline && <span>納期：{c.deadline}</span>}
+                    {c.recommend_score != null && <span className="font-mono">{c.recommend_score}点</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+    </>
+  );
+}
+
+// ─── JOB CANDIDATE DETAIL ─────────────────────────────────
+function JobCandidateDetailScreen({ id }) {
+  const { sb, user, nav, back } = useApp();
+  const [candidate, setCandidate] = useState(null);
+  const [skills, setSkills] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('analysis');
+  const [fitScore, setFitScore] = useState(0);
+  const [riskScore, setRiskScore] = useState(0);
+  const [savingScore, setSavingScore] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const tabs = [
+    { key:'analysis', label:'分析' },
+    { key:'decision', label:'応募判断' },
+    { key:'risk',     label:'リスク' },
+    { key:'proposal', label:'提案文' },
+    { key:'question', label:'質問文' },
+    { key:'estimate', label:'見積もり' },
+  ];
+
+  const load = async () => {
+    const [{ data: c }, { data: s }] = await Promise.all([
+      sb.from('job_candidates').select('*').eq('id', id).single(),
+      sb.from('skills').select('*').eq('user_id', user.id).order('usage_count', { ascending: false }),
+    ]);
+    setCandidate(c);
+    setFitScore(c?.fit_score || 0);
+    setRiskScore(c?.risk_score || 0);
+    setSkills(s || []);
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, [id]);
+
+  const updateStatus = async (status) => {
+    await sb.from('job_candidates').update({ status }).eq('id', id).eq('user_id', user.id);
+    setCandidate(v => ({ ...v, status }));
+  };
+
+  const saveScore = async () => {
+    setSavingScore(true);
+    const rec = computeRecommendScore(fitScore, riskScore, candidate?.reward || 0);
+    await sb.from('job_candidates').update({ fit_score: fitScore, risk_score: riskScore, recommend_score: rec }).eq('id', id).eq('user_id', user.id);
+    setCandidate(v => ({ ...v, fit_score: fitScore, risk_score: riskScore, recommend_score: rec }));
+    setSavingScore(false);
+  };
+
+  const registerToOpps = async () => {
+    if (!confirm('この案件を案件管理へ登録しますか？')) return;
+    setRegistering(true);
+    const c = candidate;
+    await sb.from('opportunities').insert({
+      user_id: user.id, title: c.title, source: 'other', url: c.url || null,
+      client_name: c.client_name || null, description: c.raw_text || c.description || '',
+      reward_amount: c.reward || 0, deadline: null, category: c.platform || '',
+      status: 'candidate', score: c.recommend_score || null, memo: `案件候補から登録（${new Date().toLocaleDateString('ja-JP')}）`,
+      required_skills: [], visibility: 'private',
+    });
+    await updateStatus('applied');
+    setRegistering(false);
+    alert('案件管理に登録しました。案件タブから確認できます。');
+  };
+
+  if (loading) return <LoadingState/>;
+  if (!candidate) return <ErrState error="案件候補が見つかりませんでした"/>;
+
+  const rec = getRecommendMeta(candidate.recommend_score);
+  const st = JOB_STATUS_META[candidate.status] || { label: candidate.status, tone: 'slate' };
+
+  return (
+    <>
+      <PageHeader title={candidate.title} onBack={back}/>
+
+      <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone={st.tone}>{st.label}</Badge>
+          <Badge tone={rec.tone}>{rec.label}{candidate.recommend_score != null ? `（${candidate.recommend_score}点）` : ''}</Badge>
+          <span className="text-xs text-slate-400">{candidate.platform}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label:'報酬', value: <span className="font-mono font-semibold">{fmtYen(candidate.reward)}</span> },
+            { label:'納期', value: candidate.deadline || '—' },
+            { label:'クライアント', value: candidate.client_name || '—' },
+            { label:'登録日', value: fmtDate(candidate.created_at) },
+          ].map(item => (
+            <div key={item.label}>
+              <div className="text-xs text-slate-400">{item.label}</div>
+              <div className="mt-0.5 text-sm text-slate-800">{item.value}</div>
+            </div>
+          ))}
+        </div>
+        {candidate.url && <a href={candidate.url} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-600">元の案件ページを開く →</a>}
+        {candidate.raw_text && (
+          <details className="rounded-lg border border-slate-100">
+            <summary className="cursor-pointer p-2 text-xs font-medium text-slate-600">元の案件文を見る</summary>
+            <pre className="whitespace-pre-wrap p-3 font-sans text-xs leading-relaxed text-slate-600">{candidate.raw_text}</pre>
+          </details>
+        )}
+        {candidate.concerns && <div className="rounded-md bg-amber-50 p-2 text-xs text-amber-700">気になる点：{candidate.concerns}</div>}
+      </div>
+
+      {/* スコア */}
+      <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+        <SectionTitle>スコア評価</SectionTitle>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-slate-500">Skill適合度（0〜30）</label>
+            <input type="number" min="0" max="30" value={fitScore} onChange={e => setFitScore(parseInt(e.target.value) || 0)} className={cn(inputCls, 'mt-1')}/>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500">リスク加算（0〜30）</label>
+            <input type="number" min="0" max="30" value={riskScore} onChange={e => setRiskScore(parseInt(e.target.value) || 0)} className={cn(inputCls, 'mt-1')}/>
+          </div>
+        </div>
+        <div className="mt-3 flex items-center justify-between">
+          <span className="text-sm text-slate-600">おすすめ度：<span className="font-mono font-bold text-indigo-600">{computeRecommendScore(fitScore, riskScore, candidate.reward)}点</span></span>
+          <Btn size="sm" variant="outline" onClick={saveScore} disabled={savingScore}>スコア更新</Btn>
+        </div>
+      </div>
+
+      {/* ステータス変更 */}
+      <div className="mb-5 flex flex-wrap gap-2">
+        {['apply_cand','to_apply','applied','declined'].map(s => (
+          <button key={s} onClick={() => updateStatus(s)}
+            className={cn('rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+              candidate.status === s ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-200 bg-white text-slate-600')}>
+            {JOB_STATUS_META[s]?.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 分析タブ */}
+      <div className="mb-4">
+        <div className="flex overflow-x-auto gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+          {tabs.map(t => (
+            <button key={t.key} onClick={() => setActiveTab(t.key)}
+              className={cn('flex-1 rounded-lg py-2 text-xs font-medium whitespace-nowrap transition-colors',
+                activeTab === t.key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500')}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <JobAnalysisBridge key={activeTab} kind={activeTab} candidate={candidate} skills={skills} onAnalysisSaved={(k, v) => setCandidate(prev => ({ ...prev, [k === 'analysis' ? 'analysis' : k === 'proposal' ? 'proposal' : 'application_decision']: v }))}/>
+
+      {/* 案件管理へ登録 */}
+      <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <div className="mb-2 text-sm font-semibold text-emerald-800">応募する</div>
+        <p className="mb-3 text-xs text-emerald-700">良さそうな案件を案件管理に登録します。応募文の送信は媒体側で手動で行ってください。</p>
+        <Btn onClick={registerToOpps} disabled={registering} className="w-full bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800">
+          {registering ? '登録中…' : '案件管理へ登録する'}
+        </Btn>
+      </div>
+    </>
+  );
+}
+
+// ─── SEARCH TOP SCREEN ────────────────────────────────────
+function SearchScreen() {
+  const { sb, user, nav } = useApp();
+  const [conditions, setConditions] = useState([]);
+  const [sources, setSources] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showCondForm, setShowCondForm] = useState(false);
+  const [editingCond, setEditingCond] = useState(null);
+  const [editingSrc, setEditingSrc] = useState(null);
+  const [showSrcList, setShowSrcList] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    let [{ data: c }, { data: s }] = await Promise.all([
+      sb.from('search_conditions').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      sb.from('search_sources').select('*').eq('user_id', user.id).order('sort_order'),
+    ]);
+    // 媒体シード（初回のみ）
+    if (!s || s.length === 0) {
+      const seeds = SOURCE_SEEDS.map(x => ({ ...x, user_id: user.id }));
+      const { data: seeded } = await sb.from('search_sources').insert(seeds).select();
+      s = seeded || SOURCE_SEEDS;
+    }
+    setConditions(c || []);
+    setSources(s || []);
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const srcMap = useMemo(() => {
+    const m = {};
+    sources.forEach(s => { m[s.id] = s; });
+    return m;
+  }, [sources]);
+
+  if (loading) return <LoadingState/>;
+  return (
+    <>
+      <PageHeader title="案件探索" subtitle={`${conditions.length}件の検索条件`}
+        action={
+          <div className="flex gap-2">
+            <Btn variant="outline" size="sm" onClick={() => setShowSrcList(true)}>媒体</Btn>
+            <Btn size="sm" onClick={() => { setEditingCond(null); setShowCondForm(true); }}><PlusIcon size={14}/> 条件追加</Btn>
+          </div>
+        }/>
+
+      {conditions.length === 0 ? (
+        <EmptyState message="検索条件がありません" action={
+          <Btn size="sm" variant="secondary" onClick={() => setShowCondForm(true)}>最初の検索条件を作成</Btn>
+        }/>
+      ) : (
+        <div className="space-y-3">
+          {conditions.map(cond => {
+            const src = cond.source_id ? srcMap[cond.source_id] : null;
+            return (
+              <div key={cond.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <span className="text-sm font-semibold text-slate-900">{cond.name}</span>
+                      <Badge tone={PRIORITY_META[cond.priority]?.tone || 'slate'}>{PRIORITY_META[cond.priority]?.label}</Badge>
+                      {!cond.is_active && <Badge tone="slate">無効</Badge>}
+                    </div>
+                    {src && <div className="text-xs text-slate-500">{src.name}</div>}
+                    {cond.keywords && <div className="text-xs text-slate-400 mt-0.5 truncate">KW：{cond.keywords}</div>}
+                    {cond.last_run_at && <div className="text-xs text-slate-400 font-mono mt-0.5">最終実行：{fmtDate(cond.last_run_at)}</div>}
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button onClick={() => { setEditingCond(cond); setShowCondForm(true); }} className="rounded p-1 text-slate-400 hover:bg-slate-100"><EditIcon size={14}/></button>
+                  </div>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <Btn size="sm" className="flex-1" onClick={() => nav('searchRun', { id: cond.id })}>
+                    <PlayIcon size={14}/> この条件で探す
+                  </Btn>
+                  <Btn size="sm" variant="secondary" onClick={() => nav('candidates')}>候補一覧</Btn>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 媒体一覧モーダル */}
+      {showSrcList && (
+        <FullModal title="媒体管理" onClose={() => { setShowSrcList(false); load(); }}>
+          <Btn size="sm" variant="secondary" onClick={() => { setEditingSrc(null); }}><PlusIcon size={14}/> 媒体を追加</Btn>
+          <div className="space-y-2 mt-2">
+            {sources.map(s => (
+              <div key={s.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-slate-800">{s.name}</div>
+                  <div className="text-xs text-slate-400 truncate">{s.purpose}</div>
+                </div>
+                <Badge tone={PRIORITY_META[s.priority]?.tone || 'slate'}>{PRIORITY_META[s.priority]?.label}</Badge>
+                <button onClick={() => setEditingSrc(s)} className="rounded p-1 text-slate-400 hover:bg-slate-100"><EditIcon size={14}/></button>
+              </div>
+            ))}
+          </div>
+          {editingSrc !== undefined && editingSrc !== null && (
+            <SearchSourceForm initial={editingSrc} onClose={() => setEditingSrc(undefined)} onSaved={() => { setEditingSrc(undefined); load(); }}/>
+          )}
+        </FullModal>
+      )}
+
+      {showCondForm && (
+        <SearchConditionForm
+          initial={editingCond}
+          sources={sources}
+          onClose={() => { setShowCondForm(false); setEditingCond(null); }}
+          onSaved={() => { setShowCondForm(false); setEditingCond(null); load(); }}
+        />
+      )}
+    </>
+  );
+}
+
+
 // ─── MONTHLY REVIEW BRIDGE ────────────────────────────────
 function buildMonthlyReviewPrompt(opps, skills, month) {
   const applied = opps.filter(o=>!['candidate','analyzing'].includes(o.status)).length;
@@ -2178,17 +2964,18 @@ function SettingsScreen() {
 
 // ─── APP SHELL ────────────────────────────────────────────
 const NAV_ITEMS = [
-  { screen:'home',      label:'ホーム',      Icon:HomeIcon },
-  { screen:'opps',      label:'案件',        Icon:BriefcaseIcon },
-  { screen:'skills',    label:'Skill',       Icon:SparklesIcon },
-  { screen:'knowledge', label:'ナレッジ',    Icon:BookOpenIcon },
-  { screen:'schedule',  label:'スケジュール',Icon:CalendarIcon },
+  { screen:'home',      label:'ホーム',    Icon:HomeIcon },
+  { screen:'opps',      label:'案件',      Icon:BriefcaseIcon },
+  { screen:'explore',   label:'探索',      Icon:SearchIcon },
+  { screen:'skills',    label:'Skill',     Icon:SparklesIcon },
+  { screen:'knowledge', label:'ナレッジ',  Icon:BookOpenIcon },
 ];
 
 function AppShell({ children, currentScreen, navTo }) {
   const rootScreen = currentScreen.screen;
   const activeNav = ['oppDetail','oppNew'].includes(rootScreen) ? 'opps'
     : rootScreen === 'kwDetail' ? 'knowledge'
+    : ['searchRun','candidates','candidateDetail','searchExplore'].includes(rootScreen) ? 'explore'
     : rootScreen === 'kpi' ? 'kpi'
     : rootScreen;
 
@@ -2211,6 +2998,11 @@ function AppShell({ children, currentScreen, navTo }) {
               <Icon size={18}/>{label}
             </button>
           ))}
+          <button onClick={()=>navTo('schedule')}
+            className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+              activeNav==='schedule' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-100')}>
+            <CalendarIcon size={18}/>スケジュール
+          </button>
           <button onClick={()=>navTo('kpi')}
             className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
               activeNav==='kpi' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-100')}>
@@ -2312,9 +3104,14 @@ function App() {
       case 'knowledge': return <KnowledgeScreen/>;
       case 'kwDetail':  return <KnowledgeDetailScreen id={id}/>;
       case 'schedule':  return <ScheduleScreen/>;
-      case 'kpi':       return <KpiScreen/>;
-      case 'settings':  return <SettingsScreen/>;
-      default:          return <HomeScreen/>;
+      case 'kpi':            return <KpiScreen/>;
+      case 'settings':       return <SettingsScreen/>;
+      case 'explore':        return <SearchScreen/>;
+      case 'searchExplore':  return <SearchScreen/>;
+      case 'searchRun':      return <SearchRunScreen conditionId={id}/>;
+      case 'candidates':     return <JobCandidateListScreen/>;
+      case 'candidateDetail': return <JobCandidateDetailScreen id={id}/>;
+      default:               return <HomeScreen/>;
     }
   };
 
