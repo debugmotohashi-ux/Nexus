@@ -994,8 +994,7 @@ function SkillSmartRun({ skills, onClose }) {
   const generate = () => {
     if (!source.trim() || !goal.trim()) return;
     const skillList = skills.length > 0
-      ? skills.map(s => `- ${s.name}：${s.purpose||'（用途未設定）'}　出力：${s.output_format||'（未設定）'}`).join('
-')
+      ? skills.map(s => `- ${s.name}：${s.purpose||'（用途未設定）'}　出力：${s.output_format||'（未設定）'}`).join('\n')
       : '（まだSkillが登録されていません）';
     setPrompt(`# Smart Run
 
