@@ -2652,7 +2652,7 @@ function JobCandidateDetailScreen({ id }) {
 const JOB_GENRES = [
   {
     key: 'minutes', name: '議事録・文章整理系',
-    match: ['議事録','文字起こし','要約','文章整理','リライト','校正','共有文','文章','ライティング','記事','まとめ'],
+    match: ['議事録','文字起こし','要約','文章整理','リライト','校正','共有文','ライティング'],
     searchKeywords: ['議事録','文字起こし','要約','文章整理'],
   },
   {
@@ -2696,8 +2696,9 @@ function buildGenreGroups(skills, sources) {
     const freelanceMatch = matchedSkills.filter(s => s.scope !== 'work_only').length;
     const score = Math.min(100, matchedSkills.length * 20 + freelanceMatch * 10);
     return { ...genre, matchedSkills, keywords, score };
-  }).filter(g => g.matchedSkills.length > 0)
-    .sort((a, b) => b.score - a.score);
+  }).filter(g => g.matchedSkills.length >= 2 && g.score >= 20)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4);
 }
 
 // 主要3媒体の検索URLを生成（マスタのsearch_url_templateを使用、なければトップ）
