@@ -2009,7 +2009,7 @@ const PRIORITY_META = {
   low:  { label:'低', tone:'slate' },
 };
 const SOURCE_SEEDS = [
-  { name:'クラウドワークス', purpose:'副業案件の主戦場', target_jobs:'議事録作成・文字起こし・要約・文章整理・資料作成・AI補助・データ入力', base_url:'https://crowdworks.jp', search_url_template:'https://crowdworks.jp/public/jobs/search?keyword={keywords}&work_type=0&order=score', fetch_method:'manual_url', priority:'high', sort_order:0 },
+  { name:'クラウドワークス', purpose:'副業案件の主戦場', target_jobs:'議事録作成・文字起こし・要約・文章整理・資料作成・AI補助・データ入力', base_url:'https://crowdworks.jp', search_url_template:'https://crowdworks.jp/public/jobs/search?keyword={keywords}', fetch_method:'manual_url', priority:'high', sort_order:0 },
   { name:'ランサーズ',       purpose:'クラウドワークスの比較・補助', target_jobs:'ライティング・タスク作業・事務作業・資料作成・AI活用・業務効率化', base_url:'https://www.lancers.jp', search_url_template:'https://www.lancers.jp/work/search?keyword={keywords}&type=task,project', fetch_method:'manual_url', priority:'high', sort_order:1 },
   { name:'ココナラ',         purpose:'自分の商品・サービスを出品する', target_jobs:'議事録作成代行・文章整理・教育資料作成・AI活用相談・業務効率化相談', base_url:'https://coconala.com', search_url_template:'https://coconala.com/search?keyword={keywords}', fetch_method:'manual_url', priority:'high', sort_order:2 },
   { name:'シュフティ',       purpose:'軽めの在宅案件探し', target_jobs:'データ入力・文章整理・簡単な事務作業・在宅タスク', base_url:'https://app.shufti.jp', search_url_template:'https://app.shufti.jp/worker/tasks?keyword={keywords}', fetch_method:'manual_url', priority:'mid', sort_order:3 },
@@ -2714,6 +2714,22 @@ function genreSearchUrls(sources, keywords) {
   });
 }
 
+function CopyKeywordRow({ keywords }) {
+  const [copied, setCopied] = React.useState(false);
+  const kw = keywords.join(' ');
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(kw); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch(e){}
+  };
+  return (
+    <div className="mb-2 flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
+      <span className="flex-1 font-mono text-xs text-slate-600 truncate">{kw}</span>
+      <button onClick={copy} className="shrink-0 rounded bg-white border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:border-indigo-300 hover:text-indigo-600">
+        {copied ? '✓ コピー' : 'KWコピー'}
+      </button>
+    </div>
+  );
+}
+
 function SkillBasedFinder({ skills, sources, onClose, onPaste }) {
   const groups = useMemo(() => buildGenreGroups(skills, sources), [skills, sources]);
 
@@ -2741,6 +2757,7 @@ function SkillBasedFinder({ skills, sources, onClose, onPaste }) {
                 <div className="mb-3 text-xs text-slate-400">
                   マッチSkill：{g.matchedSkills.map(s => s.name).join('、')}
                 </div>
+                <CopyKeywordRow keywords={g.keywords}/>
                 <div className="grid grid-cols-3 gap-2">
                   {urls.map(u => (
                     <button key={u.name} onClick={() => u.url && window.open(u.url, '_blank')}
