@@ -2714,6 +2714,57 @@ function genreSearchUrls(sources, keywords) {
   });
 }
 
+function GenreSearchCard({ genre: g, sources }) {
+  const [selectedKw, setSelectedKw] = React.useState(g.keywords[0] || '');
+
+  const open = (src) => {
+    if (!src) return;
+    const tpl = src.search_url_template;
+    const url = tpl
+      ? tpl.replace('{keywords}', encodeURIComponent(selectedKw)).replace('{min_reward}','0').replace('{category}','')
+      : src.base_url || '';
+    if (url) window.open(url, '_blank');
+  };
+
+  const targets = ['クラウドワークス','ランサーズ','ココナラ'];
+  const rec = g.score >= 60 ? { label:'おすすめ', tone:'emerald' } : g.score >= 30 ? { label:'適合', tone:'indigo' } : { label:'関連', tone:'slate' };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-slate-900">{g.name}</span>
+        <Badge tone={rec.tone}>{rec.label}</Badge>
+      </div>
+      <p className="mb-2 text-xs text-slate-400">キーワードを1つ選ぶ：</p>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {g.keywords.map(k => (
+          <button key={k} onClick={() => setSelectedKw(k)}
+            className={cn('rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+              selectedKw === k
+                ? 'border-indigo-600 bg-indigo-600 text-white'
+                : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-indigo-300')}>
+            {k}
+          </button>
+        ))}
+      </div>
+      <div className="mb-1 text-xs text-slate-400">選択中：<span className="font-medium text-indigo-600">{selectedKw}</span> で検索</div>
+      <div className="grid grid-cols-3 gap-2 mt-2">
+        {targets.map(name => {
+          const src = sources.find(s => s.name === name);
+          const short = name === 'クラウドワークス' ? 'CW' : name;
+          return (
+            <button key={name} onClick={() => open(src)} disabled={!src}
+              className="rounded-lg border border-slate-200 bg-white py-2 text-xs font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-40">
+              {short}
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-xs text-slate-400">マッチSkill：{g.matchedSkills.slice(0,3).map(s => s.name).join('・')}{g.matchedSkills.length > 3 ? '…' : ''}</p>
+    </div>
+  );
+}
+
 function CopyKeywordRow({ keywords }) {
   const [copied, setCopied] = React.useState(false);
   const kw = keywords.join(' ');
@@ -2736,40 +2787,13 @@ function SkillBasedFinder({ skills, sources, onClose, onPaste }) {
   return (
     <FullModal title="登録Skillから案件を探す" onClose={onClose}>
       <p className="rounded-lg bg-indigo-50 p-3 text-xs leading-relaxed text-indigo-700">
-        登録済みSkillを分析し、案件ジャンルごとに検索キーワードを自動生成しました。ボタンを押すと各サイトの検索結果が新しいタブで開きます。
+        キーワードを1つ選んで検索ボタンを押してください（1キーワード＝OR検索で広く拾えます）
       </p>
       {groups.length === 0 ? (
         <EmptyState message="マッチするSkillがありません。先にSkillを登録してください。"/>
       ) : (
-        <div className="space-y-3">
-          {groups.map(g => {
-            const urls = genreSearchUrls(sources, g.keywords);
-            const rec = g.score >= 60 ? { label:'おすすめ', tone:'emerald' } : g.score >= 30 ? { label:'適合', tone:'indigo' } : { label:'関連', tone:'slate' };
-            return (
-              <div key={g.key} className="rounded-xl border border-slate-200 bg-white p-4">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-slate-900">{g.name}</span>
-                  <Badge tone={rec.tone}>{rec.label}</Badge>
-                </div>
-                <div className="mb-2 flex flex-wrap gap-1.5">
-                  {g.keywords.map(k => <span key={k} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{k}</span>)}
-                </div>
-                <div className="mb-3 text-xs text-slate-400">
-                  マッチSkill：{g.matchedSkills.map(s => s.name).join('、')}
-                </div>
-                <CopyKeywordRow keywords={g.keywords}/>
-                <div className="grid grid-cols-3 gap-2">
-                  {urls.map(u => (
-                    <button key={u.name} onClick={() => u.url && window.open(u.url, '_blank')}
-                      disabled={!u.url}
-                      className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-40">
-                      {u.short}で開く
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+        <div className="space-y-4">
+          {groups.map(g => <GenreSearchCard key={g.key} genre={g} sources={sources}/>)}
           <button onClick={onPaste} className="w-full rounded-xl border border-dashed border-indigo-300 bg-indigo-50 py-3 text-sm font-medium text-indigo-600">
             気になる案件を見つけた → 貼り付けて登録
           </button>
