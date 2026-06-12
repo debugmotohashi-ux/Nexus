@@ -1860,6 +1860,7 @@ function KnowledgeScreen() {
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const [showDatePatch, setShowDatePatch] = useState(false);
 
   const load = async () => { await fetchTable('knowledge'); };
 
@@ -1880,6 +1881,7 @@ function KnowledgeScreen() {
     <>
       <PageHeader title="ナレッジ" subtitle={`${items.length}件`}
         action={<div className="flex gap-2">
+          <Btn variant="outline" size="sm" onClick={()=>setShowDatePatch(true)}>📅 日付修正</Btn>
           <Btn variant="outline" size="sm" onClick={()=>setShowImport(true)}>📥 JSON</Btn>
           <Btn size="sm" onClick={()=>{setEditing(null);setShowForm(true);}}><PlusIcon size={14}/> 追加</Btn>
         </div>}/>
@@ -1915,6 +1917,7 @@ function KnowledgeScreen() {
         )}
       {showForm && <KnowledgeForm initial={editing} onClose={()=>setShowForm(false)} onSaved={()=>{setShowForm(false);load();}}/>}
       {showImport && <KnowledgeImport onClose={()=>setShowImport(false)} onSaved={()=>{setShowImport(false);load();}}/>}
+      {showDatePatch && <DatePatchModal onClose={()=>{setShowDatePatch(false);load();}}/>}
     </>
   );
 }
@@ -3679,6 +3682,253 @@ function StaffScreen() {
   );
 }
 
+// ─── 日付一括修正ツール ───────────────────────────────────
+function DatePatchModal({ onClose }) {
+  const { sb, user } = useApp();
+  const [json, setJson] = useState('');
+  const [parsed, setParsed] = useState(null);
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [done, setDone] = useState(false);
+
+  const doParse = () => {
+    setErr('');
+    try {
+      const cleaned = cleanJsonInput(json);
+      const data = JSON.parse(cleaned);
+      // チャッピーが返した形式：{ date_found:[{id,date}], date_missing:[...] }
+      // または直接 [{id,date}] の配列
+      let pairs = [];
+      if (Array.isArray(data)) {
+        pairs = data.filter(d => d.id && d.date);
+      } else if (data.date_found) {
+        pairs = (data.date_found || []).filter(d => d.id && d.date);
+      }
+      if (pairs.length === 0) { setErr('id と date を持つ配列が見つかりませんでした。'); return; }
+      setParsed(pairs);
+    } catch(e) { setErr('JSONとして読み取れませんでした。'); }
+  };
+
+  const doFix = async () => {
+    if (!parsed) return;
+    setSaving(true);
+    let ok = 0;
+    for (let i = 0; i < parsed.length; i++) {
+      const { id, date } = parsed[i];
+      setProgress(i + 1 + ' / ' + parsed.length + ' 件処理中...');
+      // 現在のcontentを取得
+      const { data: rec } = await sb.from('knowledge_items').select('content').eq('id', id).eq('user_id', user.id).single();
+      if (!rec) continue;
+      // contentの実施日を行単位で書き換え
+      const lines = (rec.content || '').split('\n');
+      let replaced = false;
+      for (let j = 0; j < lines.length; j++) {
+        if (lines[j].includes('■ 実施日')) { lines[j+1] = date; replaced = true; break; }
+        if (lines[j].indexOf('【Capture Raw】実施日：') === 0) { lines[j] = '【Capture Raw】実施日：' + date; replaced = true; break; }
+      }
+      const newContent = replaced ? lines.join('\n') : '■ 実施日\n' + date + '\n\n' + (rec.content || '');
+      await sb.from('knowledge_items').update({ content: newContent }).eq('id', id).eq('user_id', user.id);
+      ok++;
+    }
+    setProgress('');
+    setSaving(false);
+    setDone(true);
+  };
+
+  return (
+    <FullModal title="日付を一括修正" onClose={onClose} onSave={parsed && !done ? doFix : null}
+      saveLabel={parsed ? parsed.length + '件を修正' : '修正'} saving={saving}>
+      {!done ? (
+        <>
+          <p className="text-xs text-slate-500">チャッピーが返したJSONをそのまま貼り付けてください。<br/>date_found配列のidとdateで一括修正します。</p>
+          <Txta label="チャッピーのJSON" rows={8} value={json} onChange={e=>{setJson(e.target.value);setParsed(null);}}
+            placeholder='{ "date_found": [{ "id": "...", "date": "2026-05-15" }] }'/>
+          <Btn variant="outline" size="sm" onClick={doParse} disabled={!json.trim()}>内容を確認</Btn>
+          {err && <ErrState error={err}/>}
+          {parsed && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <div className="text-sm font-semibold text-emerald-800">{parsed.length}件の日付を修正します</div>
+              <div className="mt-1 text-xs text-slate-500">最古：{parsed.slice().sort((a,b)=>a.date<b.date?-1:1)[0]?.date} / 最新：{parsed.slice().sort((a,b)=>a.date>b.date?-1:1)[0]?.date}</div>
+            </div>
+          )}
+          {progress && <p className="text-xs text-indigo-500 text-center">{progress}</p>}
+        </>
+      ) : (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
+          <div className="text-lg">✅</div>
+          <div className="text-sm font-semibold text-emerald-800">修正完了しました</div>
+          <p className="text-xs text-slate-500 mt-1">スタッフの教育記録タブを確認してください</p>
+        </div>
+      )}
+    </FullModal>
+  );
+}
+
+// ─── CAPTURE BATCH IMPORT ────────────────────────────────
+function CaptureBatchImport({ onClose }) {
+  const { sb, user, store, fetchTable } = useApp();
+  const [json, setJson] = useState('');
+  const [list, setList] = useState(null);
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [done, setDone] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(false);
+
+  const PROMPT_TEXT = [
+    '以下の記録をJSON形式に変換してください。',
+    '',
+    '出力フォーマット（JSON配列のみ、説明文不要）：',
+    '[',
+    '  {',
+    '    "date": "YYYY-MM-DD",',
+    '    "staff_name": "対象スタッフ名（教育・面談以外は空文字）",',
+    '    "category": "education または interview または meeting",',
+    '    "title": "内容を1行で要約",',
+    '    "related_doc": "元の記録をそのまま全文"',
+    '  }',
+    ']',
+    '',
+    'ルール：',
+    '- 日付はYYYY-MM-DD形式で抽出',
+    '- category: education（教育）/ interview（面談）/ meeting（打ち合わせ・MTG）',
+    '- staff_nameが複数いる場合は別レコードに分ける',
+    '- related_docには元のテキストを省略せずそのまま入れる',
+    '- 出力はJSONのみ（```や説明文は不要）',
+    '',
+    '---',
+    '（ここに記録を貼り付けてください）',
+  ].join('\n');
+
+  const [promptCopied, setPromptCopied] = useState(false);
+  const copyPrompt = async () => {
+    try { await navigator.clipboard.writeText(PROMPT_TEXT); setPromptCopied(true); setTimeout(()=>setPromptCopied(false),2000); } catch(e){}
+  };
+
+  const doParse = () => {
+    setErr('');
+    try {
+      const cleaned = cleanJsonInput(json);
+      const data = JSON.parse(cleaned);
+      const arr = Array.isArray(data) ? data : [data];
+      const valid = arr.filter(d => d && d.date);
+      if (valid.length === 0) { setErr('dateを持つレコードが見つかりませんでした。'); return; }
+      setList(valid);
+    } catch(e) { setErr('JSONとして読み取れませんでした。'); }
+  };
+
+  const doImport = async () => {
+    if (!list) return;
+    setSaving(true);
+    const staffMap = {};
+    (store.staff || []).forEach(s => { staffMap[s.name] = s.id; });
+
+    let ok = 0;
+    for (let i = 0; i < list.length; i++) {
+      const d = list[i];
+      setProgress((i+1) + ' / ' + list.length + ' 件処理中...');
+      // staff_idを名前から解決
+      let staffId = null;
+      if (d.staff_name) {
+        for (const [name, id] of Object.entries(staffMap)) {
+          if (d.staff_name.includes(name) || name.includes(d.staff_name)) { staffId = id; break; }
+        }
+      }
+      const catMap = { education:'education', interview:'interview', meeting:'meeting', other:'general', '教育':'education', '面談':'interview', '打ち合わせ':'meeting', 'MTG':'meeting' };
+      const cat = catMap[d.category] || 'general';
+      const typeLabel = cat === 'education' ? '教育ログ' : cat === 'interview' ? '面談ログ' : 'MTGログ';
+      const contentLines = [
+        '【' + typeLabel + '】',
+        '',
+        '■ 実施日',
+        d.date || '',
+        '',
+        '■ 誰に',
+        d.staff_name || '',
+        '',
+        '■ 内容',
+        d.title || '',
+      ];
+      if (d.related_doc) {
+        contentLines.push('', '─────────────────', '■ 関連資料', d.related_doc);
+      }
+      const contentVal = contentLines.join('\n');
+      await sb.from('knowledge_items').insert({
+        user_id: user.id,
+        title: (d.staff_name ? d.staff_name + ' ' : '') + (d.title || '').slice(0, 40),
+        category: cat,
+        content: contentVal,
+        tags: ['capture', cat],
+        source_ref: 'バッチインポート',
+        staff_id: staffId,
+      });
+      ok++;
+    }
+    await fetchTable('knowledge');
+    setProgress('');
+    setSaving(false);
+    setDone(true);
+  };
+
+  return (
+    <FullModal title="記録バッチインポート" onClose={onClose}
+      onSave={list && !done ? doImport : null}
+      saveLabel={list ? list.length + '件を登録' : '登録'} saving={saving}>
+      {!done ? (
+        <>
+          {/* チャッピーへの指示文 */}
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 space-y-2">
+            <div className="text-xs font-semibold text-indigo-700">① チャッピーへのプロンプトをコピー</div>
+            <p className="text-xs text-slate-500">このプロンプトをチャッピーに貼り、その後に記録テキストを追加してください。</p>
+            <Btn variant="outline" size="sm" onClick={copyPrompt}>
+              {promptCopied ? <><CheckIcon size={14}/> コピーしました</> : <><CopyIcon size={14}/> プロンプトをコピー</>}
+            </Btn>
+            <button onClick={()=>setShowPrompt(v=>!v)} className="text-xs text-indigo-500 underline">
+              {showPrompt ? '▲ 閉じる' : '▼ 内容を確認する'}
+            </button>
+            {showPrompt && (
+              <pre className="whitespace-pre-wrap font-mono text-[10px] text-slate-600 bg-white rounded-lg p-2 border border-slate-200 max-h-48 overflow-y-auto">{PROMPT_TEXT}</pre>
+            )}
+          </div>
+
+          {/* チャッピーの返答を貼る */}
+          <div className="text-xs font-semibold text-slate-600">② チャッピーが返したJSONを貼り付け</div>
+          <Txta label="" rows={8} value={json} onChange={e=>{setJson(e.target.value);setList(null);}}
+            placeholder='[ { "date": "2026-05-15", "staff_name": "黒田くん", "category": "education", "title": "...", "related_doc": "..." } ]'/>
+          <Btn variant="outline" size="sm" onClick={doParse} disabled={!json.trim()}>内容を確認</Btn>
+          {err && <ErrState error={err}/>}
+          {list && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-1">
+              <div className="text-sm font-semibold text-emerald-800">{list.length}件を登録します</div>
+              <div className="max-h-48 overflow-y-auto space-y-0.5">
+                {list.map((d,i) => {
+                  const c = SCHED_CATS[d.category] || SCHED_CATS.other;
+                  return (
+                    <div key={i} className="flex items-center gap-2 text-xs text-slate-600">
+                      <span className={cn('rounded px-1.5 py-0.5 shrink-0', c.card, c.head)}>{c.icon}</span>
+                      <span className="shrink-0 font-mono text-slate-400">{d.date}</span>
+                      {d.staff_name && <span className="shrink-0">{d.staff_name}</span>}
+                      <span className="truncate text-slate-500">{d.title}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {progress && <p className="text-xs text-indigo-500 text-center">{progress}</p>}
+        </>
+      ) : (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
+          <div className="text-2xl mb-2">✅</div>
+          <div className="text-sm font-semibold text-emerald-800">インポート完了</div>
+          <p className="text-xs text-slate-500 mt-1">スタッフの教育・面談記録タブを確認してください</p>
+        </div>
+      )}
+    </FullModal>
+  );
+}
+
 // ─── CAPTURE EXPORT (チャッピー連携) ─────────────────────
 function parseCapture(item) {
   // knowledge_items のcontent文字列からフィールドを抽出
@@ -3881,6 +4131,7 @@ function CaptureScreen() {
   const [step, setStep] = useState(1); // 1:input 2:bridge 3:preview
   const [relatedDoc, setRelatedDoc] = useState('');
   const [showExport, setShowExport] = useState(false);
+  const [showBatchImport, setShowBatchImport] = useState(false);
   const [actualDate, setActualDate] = useState(() => localIso());
   const [isUrgent, setIsUrgent] = useState(false);
   const [linkedStaffId, setLinkedStaffId] = useState(null);
@@ -3956,7 +4207,10 @@ function CaptureScreen() {
   return (
     <>
       <PageHeader title="Capture" subtitle="話す→AIが構造化→保存" onBack={back}
-        action={<Btn variant="outline" size="sm" onClick={()=>setShowExport(true)}>📋 JSON</Btn>}/>
+        action={<div className="flex gap-2">
+          <Btn variant="outline" size="sm" onClick={()=>setShowBatchImport(true)}>📥 一括</Btn>
+          <Btn variant="outline" size="sm" onClick={()=>setShowExport(true)}>📋 JSON</Btn>
+        </div>}/>
 
       {/* STEP 1: 入力 */}
       <div className="mb-3 flex items-center justify-between">
@@ -4018,6 +4272,7 @@ function CaptureScreen() {
               className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none">
               <option value="education">📚 教育</option>
               <option value="interview">💬 面談</option>
+              <option value="meeting">🤝 打ち合わせ</option>
               <option value="decision">⚖️ 判断</option>
               <option value="plan">💡 企画</option>
               <option value="general">○ その他</option>
@@ -4131,6 +4386,7 @@ function CaptureScreen() {
         <p className="text-center text-sm text-emerald-600 py-4">保存しました ✓</p>
       )}
       {showExport && <CaptureExport onClose={()=>setShowExport(false)}/>}
+      {showBatchImport && <CaptureBatchImport onClose={()=>setShowBatchImport(false)}/>}
     </>
   );
 }
