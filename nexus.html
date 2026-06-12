@@ -558,129 +558,81 @@ function AuthScreen({ sb }) {
 // ─── HOME SCREEN ──────────────────────────────────────────
 function HomeScreen() {
   const { sb, user, nav } = useApp();
-  const [opps, setOpps] = useState([]);
-  const [schedules, setSchedules] = useState([]);
+  const [skills, setSkills] = useState([]);
+  const [staffFollow, setStaffFollow] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showSmartRun, setShowSmartRun] = useState(false);
 
   useEffect(() => {
     const load = async () => {
-      const [{ data: o }, { data: s }] = await Promise.all([
-        sb.from('opportunities').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }),
-        sb.from('schedules').select('*').eq('user_id', user.id).eq('status','todo').order('scheduled_date', { ascending: true }).limit(5),
-      ]);
-      setOpps(o || []);
-      setSchedules(s || []);
+      const { data: sk } = await sb.from('skills').select('*').eq('user_id', user.id);
+      setSkills(sk || []);
+      // スタッフのフォロー漏れ（教育14日以上）— テーブルが無くてもエラーにしない
+      try {
+        const { data: st } = await sb.from('staff_profiles').select('name,last_education_at,is_active').eq('user_id', user.id);
+        if (st) {
+          const follow = st.filter(s => s.is_active && (() => {
+            if (!s.last_education_at) return true;
+            const d = new Date(s.last_education_at); d.setHours(0,0,0,0);
+            const t = new Date(); t.setHours(0,0,0,0);
+            return Math.round((t - d) / 86400000) >= 14;
+          })());
+          setStaffFollow(follow);
+        }
+      } catch(e) {}
       setLoading(false);
     };
     load();
   }, []);
 
-  const actionOpps = useMemo(() =>
-    (opps || []).filter(o => ['won','in_progress','awaiting_delivery','revision','awaiting_reply'].includes(o.status)),
-    [opps]
-  );
-  const thisMonth = useMemo(() => {
-    const now = new Date();
-    const m = now.getFullYear()+'-'+(String(now.getMonth()+1).padStart(2,'0'));
-    const monthOpps = opps.filter(o => o.updated_at && o.updated_at.startsWith(m));
-    const revenue = opps.filter(o => ['delivered','done'].includes(o.status) && o.updated_at?.startsWith(m))
-                        .reduce((s,o)=>s+o.reward_amount,0);
-    const applied = opps.filter(o=>o.status!=='candidate'&&o.status!=='analyzing').length;
-    const orders = opps.filter(o=>['won','in_progress','awaiting_delivery','delivered','done'].includes(o.status)).length;
-    return { revenue, applied, orders, winRate: applied>0?Math.round(orders/applied*100):0 };
-  }, [opps]);
-
   const today = new Date().toLocaleDateString('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'long',day:'numeric',weekday:'short'});
+
+  const ACTIONS = [
+    { key:'capture', icon:'🎤', title:'Capture',  desc:'30秒で保存する',            screen:'capture',  tone:'indigo' },
+    { key:'smartrun',icon:'⚡', title:'Smart Run', desc:'今やるべきことを確認',       action:()=>setShowSmartRun(true), tone:'amber' },
+    { key:'staff',   icon:'👥', title:'スタッフ',   desc:'人物DB・教育フォロー',       screen:'staff',    tone:'emerald' },
+    { key:'knowledge',icon:'📚',title:'ナレッジ',   desc:'蓄積した知識を見る',         screen:'knowledge',tone:'slate' },
+    { key:'skills',  icon:'⭐', title:'Skill',      desc:'再利用テンプレート',         screen:'skills',   tone:'indigo' },
+    { key:'kpi',     icon:'📊', title:'KPI',        desc:'数値と月次レビュー',         screen:'kpi',      tone:'slate' },
+  ];
+  const toneCls = {
+    indigo:'border-indigo-200 bg-indigo-50 hover:border-indigo-300',
+    amber:'border-amber-200 bg-amber-50 hover:border-amber-300',
+    emerald:'border-emerald-200 bg-emerald-50 hover:border-emerald-300',
+    slate:'border-slate-200 bg-white hover:border-slate-300',
+  };
 
   if (loading) return <LoadingState/>;
   return (
     <>
-      <PageHeader title="ホーム" subtitle={today}
-        action={<Btn size="sm" onClick={()=>navTo('opps')}><PlusIcon size={14}/> 新規案件</Btn>}/>
+      <PageHeader title="Nexus" subtitle={today}/>
 
-      <section className="mb-7">
-        <SectionTitle count={actionOpps.length}>対応が必要な案件</SectionTitle>
-        {actionOpps.length === 0
-          ? <p className="text-sm text-slate-400 py-3">対応中の案件はありません</p>
-          : (
-            <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
-              {actionOpps.map(o => {
-                const m = STATUS_META[o.status];
-                return (
-                  <button key={o.id} onClick={()=>nav('oppDetail',{id:o.id})}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50">
-                    <span className={cn('h-2 w-2 shrink-0 rounded-full',
-                      m.tone==='amber'?'bg-amber-400':m.tone==='indigo'?'bg-indigo-500':m.tone==='emerald'?'bg-emerald-500':'bg-slate-300')}/>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">{o.title}</div>
-                      <div className="mt-0.5 flex items-center gap-2">
-                        <StatusBadge status={o.status}/>
-                        <span className="font-mono text-xs text-slate-400">{fmtYen(o.reward_amount)}</span>
-                      </div>
-                    </div>
-                    {o.deadline && (
-                      <span className={cn('shrink-0 font-mono text-xs', daysUntil(o.deadline)<=3?'text-rose-500':'text-slate-400')}>
-                        {deadlineLabel(o.deadline)}
-                      </span>
-                    )}
-                    <ChevronRightIcon size={16} className="shrink-0 text-slate-300"/>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-      </section>
-
-      <section className="mb-7 grid grid-cols-2 gap-3">
-        {[
-          { label: '受注率', value: thisMonth.winRate+'%', sub:`応募${thisMonth.applied}→受注${thisMonth.orders}`, accent:'text-emerald-600' },
-          { label: '累計売上', value: fmtYenMan(thisMonth.revenue), sub:'完了済みのみ', accent:'text-indigo-600' },
-        ].map(card => (
-          <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="text-xs text-slate-500">{card.label}</div>
-            <div className={cn('mt-1 font-mono text-2xl font-bold', card.accent)}>{card.value}</div>
-            <div className="mt-1 text-xs text-slate-400">{card.sub}</div>
-          </div>
-        ))}
-      </section>
-
-      {schedules.length > 0 && (
-        <section className="mb-7">
-          <SectionTitle>直近のタスク</SectionTitle>
-          <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
-            {schedules.map(s => (
-              <div key={s.id} className="flex items-center gap-3 px-4 py-3">
-                <CalendarIcon size={14} className="shrink-0 text-slate-400"/>
-                <span className="flex-1 truncate text-sm text-slate-800">{s.title}</span>
-                {s.scheduled_date && <span className="shrink-0 font-mono text-xs text-slate-400">{fmtDate(s.scheduled_date)}</span>}
-              </div>
-            ))}
-          </div>
-        </section>
+      {/* フォロー漏れアラート */}
+      {staffFollow.length > 0 && (
+        <button onClick={()=>nav('staff')} className="mb-4 w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-left">
+          <div className="text-xs font-semibold text-amber-700 mb-0.5">教育フォローが空いています</div>
+          <div className="text-xs text-amber-600">{staffFollow.map(s=>s.name).join('・')}</div>
+        </button>
       )}
 
-      <div className="mb-4 grid grid-cols-1 gap-3">
-        <button onClick={() => nav('quicklog')}
-          className="w-full rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50 p-4 text-left transition-colors hover:border-indigo-300 hover:bg-indigo-100">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">📝</span>
-            <div>
-              <div className="text-sm font-semibold text-indigo-800">Capture</div>
-              <div className="text-xs text-indigo-500">なぜを30秒で保存する</div>
+      {/* アクションランチャー */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {ACTIONS.map(a => (
+          <button key={a.key}
+            onClick={() => a.action ? a.action() : nav(a.screen)}
+            className={cn('w-full rounded-xl border-2 p-4 text-left transition-colors', toneCls[a.tone])}>
+            <div className="flex items-center gap-3">
+              <span className="text-2xl shrink-0">{a.icon}</span>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-slate-800">{a.title}</div>
+                <div className="text-xs text-slate-500">{a.desc}</div>
+              </div>
             </div>
-          </div>
-        </button>
-        <button onClick={() => nav('staff')}
-          className="w-full rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50 p-4 text-left transition-colors hover:border-emerald-300 hover:bg-emerald-100">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">👥</span>
-            <div>
-              <div className="text-sm font-semibold text-emerald-800">スタッフ</div>
-              <div className="text-xs text-emerald-600">人物DB・教育/面談のフォロー間隔を管理</div>
-            </div>
-          </div>
-        </button>
+          </button>
+        ))}
       </div>
+
+      {showSmartRun && <SkillSmartRun skills={skills} onClose={()=>setShowSmartRun(false)}/>}
     </>
   );
 }
@@ -3608,19 +3560,20 @@ function SettingsScreen() {
 // ─── APP SHELL ────────────────────────────────────────────
 const NAV_ITEMS = [
   { screen:'home',      label:'ホーム',    Icon:HomeIcon },
-  { screen:'opps',      label:'案件',      Icon:BriefcaseIcon },
-  { screen:'explore',   label:'探索',      Icon:SearchIcon },
+  { screen:'staff',     label:'スタッフ',  Icon:UsersIcon },
+  { screen:'capture',   label:'記録',      Icon:WandIcon },
   { screen:'skills',    label:'Skill',     Icon:SparklesIcon },
   { screen:'knowledge', label:'ナレッジ',  Icon:BookOpenIcon },
 ];
 
 function AppShell({ children, currentScreen, navTo }) {
   const rootScreen = currentScreen.screen;
-  const activeNav = ['oppDetail','oppNew'].includes(rootScreen) ? 'opps'
+  const activeNav = ['oppDetail','oppNew','opps'].includes(rootScreen) ? 'home'
     : rootScreen === 'kwDetail' ? 'knowledge'
-    : ['searchRun','candidates','candidateDetail','searchExplore'].includes(rootScreen) ? 'explore'
-    : ['staff','staffDetail','quicklog'].includes(rootScreen) ? 'home'
-    : rootScreen === 'kpi' ? 'kpi'
+    : ['searchRun','candidates','candidateDetail','searchExplore','explore'].includes(rootScreen) ? 'home'
+    : ['staffDetail'].includes(rootScreen) ? 'staff'
+    : ['quicklog'].includes(rootScreen) ? 'capture'
+    : rootScreen === 'kpi' ? 'home'
     : rootScreen;
 
   return (
