@@ -555,7 +555,7 @@ function AuthScreen({ sb }) {
 function HomeScreen() {
   const { sb, user, nav } = useApp();
   const [skills, setSkills] = useState([]);
-  const [staffFollow, setStaffFollow] = useState([]);
+  const [staffFollow, setStaffFollow] = useState({ edNoSched:[], edScheduled:[], ivNoSched:[], ivScheduled:[], weekEvents:[] });
   const [kpiStats, setKpiStats] = useState({ captures: 0, knowledge: 0, skillCount: 0 });
   const [loading, setLoading] = useState(true);
   const [showSmartRun, setShowSmartRun] = useState(false);
@@ -574,15 +574,28 @@ function HomeScreen() {
       setKpiStats({ captures: capCount||0, knowledge: kwCount||0, skillCount: (sk||[]).length });
       // スタッフのフォロー漏れ（教育14日以上）— テーブルが無くてもエラーにしない
       try {
-        const { data: st } = await sb.from('staff_profiles').select('name,last_education_at,is_active').eq('user_id', user.id);
+        const { data: st } = await sb.from('staff_profiles').select('name,last_education_at,last_interview_at,next_education_at,next_interview_at,is_active').eq('user_id', user.id);
         if (st) {
-          const follow = st.filter(s => s.is_active && (() => {
-            if (!s.last_education_at) return true;
-            const d = new Date(s.last_education_at); d.setHours(0,0,0,0);
-            const t = new Date(); t.setHours(0,0,0,0);
-            return Math.round((t - d) / 86400000) >= 14;
-          })());
-          setStaffFollow(follow);
+          const today = new Date(); today.setHours(0,0,0,0);
+          const in7 = new Date(today); in7.setDate(today.getDate()+7);
+          const daysSince = (iso) => { if (!iso) return 999; const d=new Date(iso); d.setHours(0,0,0,0); return Math.round((today-d)/86400000); };
+          const daysUntilDate = (iso) => { if (!iso) return null; const d=new Date(iso); d.setHours(0,0,0,0); return Math.round((d-today)/86400000); };
+          const active = st.filter(s => s.is_active);
+          const needsEdu = active.filter(s => daysSince(s.last_education_at) >= 14);
+          const needsIv  = active.filter(s => daysSince(s.last_interview_at) >= 30);
+          const edNoSched   = needsEdu.filter(s => !s.next_education_at);
+          const edScheduled = needsEdu.filter(s =>  s.next_education_at);
+          const ivNoSched   = needsIv.filter(s =>  !s.next_interview_at);
+          const ivScheduled = needsIv.filter(s =>   s.next_interview_at);
+          const weekEvents = active.flatMap(s => {
+            const ev = [];
+            const du = daysUntilDate(s.next_education_at);
+            if (du !== null && du >= 0 && du <= 7) ev.push({ name:s.name, type:'education', date:s.next_education_at, daysUntil:du });
+            const di = daysUntilDate(s.next_interview_at);
+            if (di !== null && di >= 0 && di <= 7) ev.push({ name:s.name, type:'interview', date:s.next_interview_at, daysUntil:di });
+            return ev;
+          }).sort((a,b)=>a.daysUntil-b.daysUntil);
+          setStaffFollow({ edNoSched, edScheduled, ivNoSched, ivScheduled, weekEvents });
         }
       } catch(e) {}
       setLoading(false);
@@ -611,11 +624,30 @@ function HomeScreen() {
     <>
       <PageHeader title="Nexus" subtitle={today}/>
 
-      {/* フォロー漏れアラート */}
-      {staffFollow.length > 0 && (
-        <button onClick={()=>nav('staff')} className="mb-4 w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-left">
-          <div className="text-xs font-semibold text-amber-700 mb-0.5">教育フォローが空いています</div>
-          <div className="text-xs text-amber-600">{staffFollow.map(s=>s.name).join('・')}</div>
+      {/* フォロー・予定アラート */}
+      {(staffFollow.edNoSched.length > 0 || staffFollow.ivNoSched.length > 0) && (
+        <button onClick={()=>nav('staff')} className="mb-3 w-full rounded-xl border border-rose-200 bg-rose-50 p-3 text-left space-y-1.5">
+          <div className="text-xs font-bold text-rose-600">⚠️ フォロー必要（予定なし）</div>
+          {staffFollow.edNoSched.length > 0 && <div className="text-xs text-rose-500">📚 教育：{staffFollow.edNoSched.map(s=>s.name).join('・')}</div>}
+          {staffFollow.ivNoSched.length > 0 && <div className="text-xs text-rose-500">💬 面談：{staffFollow.ivNoSched.map(s=>s.name).join('・')}</div>}
+        </button>
+      )}
+      {(staffFollow.edScheduled.length > 0 || staffFollow.ivScheduled.length > 0) && (
+        <button onClick={()=>nav('staff')} className="mb-3 w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-left space-y-1.5">
+          <div className="text-xs font-bold text-amber-700">📅 フォロー必要（予定あり）</div>
+          {staffFollow.edScheduled.map(s=><div key={s.name} className="text-xs text-amber-600">📚 {s.name}：{s.next_education_at}</div>)}
+          {staffFollow.ivScheduled.map(s=><div key={s.name} className="text-xs text-amber-600">💬 {s.name}：{s.next_interview_at}</div>)}
+        </button>
+      )}
+      {staffFollow.weekEvents.length > 0 && (
+        <button onClick={()=>nav('calendar')} className="mb-3 w-full rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-left space-y-1">
+          <div className="text-xs font-bold text-indigo-700">🗓 今週の予定</div>
+          {staffFollow.weekEvents.slice(0,4).map((e,i)=>(
+            <div key={i} className="text-xs text-indigo-600">
+              {e.type==='education'?'📚':'💬'} {e.name}
+              <span className="ml-1 text-indigo-400">{e.daysUntil===0?'今日':e.daysUntil===1?'明日':e.date}</span>
+            </div>
+          ))}
         </button>
       )}
 
@@ -1906,6 +1938,7 @@ function ScheduleScreen() {
   const [filter, setFilter] = useState('todo');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [showImport, setShowImport] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -1935,7 +1968,10 @@ function ScheduleScreen() {
   return (
     <>
       <PageHeader title="スケジュール" subtitle={`${items.filter(i=>i.status==='todo').length}件 未完了`}
-        action={<Btn size="sm" onClick={()=>{setEditing(null);setShowForm(true);}}><PlusIcon size={14}/> 追加</Btn>}/>
+        action={<div className="flex gap-2">
+          <Btn variant="outline" size="sm" onClick={()=>setShowImport(true)}>📥 JSON</Btn>
+          <Btn size="sm" onClick={()=>{setEditing(null);setShowForm(true);}}><PlusIcon size={14}/> 追加</Btn>
+        </div>}/>
       <div className="mb-4 flex gap-2">
         {[{k:'todo',l:'未完了'},{k:'done',l:'完了'},{k:'all',l:'すべて'}].map(({k,l})=>(
           <button key={k} onClick={()=>setFilter(k)}
@@ -1976,6 +2012,7 @@ function ScheduleScreen() {
           </div>
         )}
       {showForm && <ScheduleForm initial={editing} opps={opps} onClose={()=>setShowForm(false)} onSaved={()=>{setShowForm(false);load();}}/>}
+      {showImport && <ScheduleImport onClose={()=>setShowImport(false)} onSaved={()=>{setShowImport(false);load();}}/>}
     </>
   );
 }
@@ -3018,6 +3055,10 @@ function StaffForm({ initial, onClose, onSaved }) {
         <Inp label="最終教育日" type="date" value={f.last_education_at} onChange={upd('last_education_at')}/>
         <Inp label="最終面談日" type="date" value={f.last_interview_at} onChange={upd('last_interview_at')}/>
       </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Inp label="次回教育予定日" type="date" value={f.next_education_at||''} onChange={upd('next_education_at')}/>
+        <Inp label="次回面談予定日" type="date" value={f.next_interview_at||''} onChange={upd('next_interview_at')}/>
+      </div>
       <Txta label="メモ" rows={2} value={f.notes} onChange={upd('notes')}/>
       <label className="flex items-center gap-2 text-sm text-slate-700">
         <input type="checkbox" checked={!!f.is_active} onChange={e=>setF(v=>({...v,is_active:e.target.checked}))} className="h-4 w-4 rounded border-slate-300 text-indigo-600"/>
@@ -3128,6 +3169,8 @@ function normalizeStaff(d, userId) {
     notes: d.notes || '',
     last_education_at: d.last_education_at || d.last_education || null,
     last_interview_at: d.last_interview_at || d.last_interview || null,
+    next_education_at: d.next_education_at || null,
+    next_interview_at: d.next_interview_at || null,
     is_active: d.is_active !== false,
   };
 }
@@ -3444,6 +3487,19 @@ function CaptureScreen() {
       user_id: user.id, title, category: categoryVal,
       content: contentVal, tags: tagsVal, source_ref: 'Nexus Capture',
     });
+    // 誰に・誰とが一致するスタッフの日付を自動更新
+    const whoVal = useStructured && parsed ? (parsed.who || '') : '';
+    if (whoVal.trim()) {
+      const today = new Date().toISOString().split('T')[0];
+      const field = (categoryVal === 'education') ? 'last_education_at' : categoryVal === 'interview' ? 'last_interview_at' : null;
+      if (field) {
+        const { data: matched } = await sb.from('staff_profiles').select('id,name').eq('user_id', user.id);
+        if (matched) {
+          const hit = matched.find(s => whoVal.includes(s.name) || s.name.includes(whoVal.trim()));
+          if (hit) await sb.from('staff_profiles').update({ [field]: today }).eq('id', hit.id).eq('user_id', user.id);
+        }
+      }
+    }
     setSaving(false); setSaved(true);
     setRaw(''); setPrompt(''); setReply(''); setParsed(null); setStep(1); setRelatedDoc('');
   };
@@ -3611,6 +3667,180 @@ function MonthlyReviewBridge({ opps, skills }) {
   );
 }
 
+// ─── CALENDAR SCREEN ──────────────────────────────────────
+function CalendarScreen() {
+  const { sb, user, nav } = useApp();
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [weekOffset, setWeekOffset] = useState(0); // 0=今週, 1=来週...
+
+  const load = async () => {
+    setLoading(true);
+    const [{ data: staff }, { data: scheds }] = await Promise.all([
+      sb.from('staff_profiles').select('name,role,next_education_at,next_interview_at,is_active').eq('user_id', user.id),
+      sb.from('schedules').select('*').eq('user_id', user.id).eq('status','todo').order('scheduled_date'),
+    ]);
+    const evs = [];
+    (staff||[]).filter(s=>s.is_active).forEach(s => {
+      if (s.next_education_at) evs.push({ date:s.next_education_at, label:`📚 ${s.name} 教育`, type:'education', source:'staff' });
+      if (s.next_interview_at) evs.push({ date:s.next_interview_at, label:`💬 ${s.name} 面談`, type:'interview', source:'staff' });
+    });
+    (scheds||[]).forEach(s => {
+      if (s.scheduled_date) evs.push({ date:s.scheduled_date, label:`✅ ${s.title}`, type:s.type, source:'schedule', id:s.id });
+    });
+    evs.sort((a,b)=>a.date<b.date?-1:1);
+    setEvents(evs);
+    setLoading(false);
+  };
+  useEffect(()=>{ load(); }, []);
+
+  const getWeekDays = (offset) => {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const mon = new Date(today); mon.setDate(today.getDate()-today.getDay()+1+offset*7);
+    return Array.from({length:7},(_,i)=>{ const d=new Date(mon); d.setDate(mon.getDate()+i); return d; });
+  };
+  const weekDays = useMemo(()=>getWeekDays(weekOffset),[weekOffset]);
+  const isoStr = (d) => d.toISOString().split('T')[0];
+  const WEEKDAY = ['月','火','水','木','金','土','日'];
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  if (loading) return <LoadingState/>;
+
+  const weekLabel = weekOffset===0?'今週':weekOffset===1?'来週':`${weekOffset}週後`;
+  return (
+    <>
+      <PageHeader title="カレンダー" subtitle="スタッフ予定・タスク"/>
+      <div className="mb-4 flex items-center justify-between">
+        <Btn variant="outline" size="sm" onClick={()=>setWeekOffset(w=>Math.max(0,w-1))} disabled={weekOffset===0}>← 前週</Btn>
+        <span className="text-sm font-medium text-slate-600">{weekLabel}</span>
+        <Btn variant="outline" size="sm" onClick={()=>setWeekOffset(w=>w+1)}>来週 →</Btn>
+      </div>
+
+      <div className="space-y-2 mb-6">
+        {weekDays.map((day,idx)=>{
+          const iso = isoStr(day);
+          const dayEvs = events.filter(e=>e.date===iso);
+          const isToday = iso===isoStr(today);
+          return (
+            <div key={iso} className={cn('rounded-xl border p-3', isToday?'border-indigo-300 bg-indigo-50':'border-slate-200 bg-white')}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={cn('text-sm font-semibold', isToday?'text-indigo-700':'text-slate-700',
+                  idx>=5?'text-rose-500':'')}>
+                  {day.getMonth()+1}/{day.getDate()}（{WEEKDAY[idx]}）
+                </span>
+                {isToday && <Badge tone="indigo">今日</Badge>}
+              </div>
+              {dayEvs.length===0
+                ? <p className="text-xs text-slate-300">予定なし</p>
+                : dayEvs.map((e,i)=>(
+                  <div key={i} className={cn('text-xs py-1 px-2 rounded mb-1',
+                    e.type==='education'?'bg-indigo-100 text-indigo-700':
+                    e.type==='interview'?'bg-emerald-100 text-emerald-700':
+                    'bg-slate-100 text-slate-600')}>
+                    {e.label}
+                  </div>
+                ))
+              }
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 今後30日の一覧 */}
+      <SectionTitle>今後30日</SectionTitle>
+      {events.filter(e=>{
+        const d=new Date(e.date); d.setHours(0,0,0,0);
+        const diff=Math.round((d-today)/86400000);
+        return diff>=0&&diff<=30;
+      }).length===0
+        ? <p className="text-sm text-slate-400 py-3">予定はありません</p>
+        : events.filter(e=>{
+          const d=new Date(e.date); d.setHours(0,0,0,0);
+          const diff=Math.round((d-today)/86400000);
+          return diff>=0&&diff<=30;
+        }).map((e,i)=>(
+          <div key={i} className="flex items-center gap-3 py-2 border-b border-slate-100">
+            <span className="font-mono text-xs text-slate-400 shrink-0 w-12">{e.date.slice(5)}</span>
+            <span className="text-sm text-slate-700 flex-1">{e.label}</span>
+          </div>
+        ))
+      }
+    </>
+  );
+}
+
+// ─── SCHEDULE JSON IMPORT ─────────────────────────────────
+function ScheduleImport({ onClose, onSaved }) {
+  const { sb, user } = useApp();
+  const [json, setJson] = useState('');
+  const [list, setList] = useState(null);
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+  const fileRef = useRef(null);
+
+  const onFile = (e) => {
+    const file = e.target.files?.[0]; if(!file) return;
+    const r = new FileReader(); r.onload=()=>{ setJson(String(r.result||'')); setList(null); }; r.readAsText(file);
+  };
+  const doParse = () => {
+    setErr('');
+    const cleaned = cleanJsonInput(json);
+    try {
+      let data = JSON.parse(cleaned);
+      if (!Array.isArray(data)) data = [data];
+      const valid = data.filter(d=>d&&d.title);
+      if (valid.length===0){ setErr('titleを持つスケジュールが見つかりませんでした。'); return; }
+      setList(valid);
+    } catch(e){ setErr('JSONとして読み取れませんでした。'); }
+  };
+  const doImport = async () => {
+    setSaving(true);
+    const rows = list.map(d=>({
+      user_id: user.id,
+      title: d.title||'',
+      type: ['task','meeting','deadline','other'].includes(d.type)?d.type:'task',
+      scheduled_date: d.scheduled_date||d.date||null,
+      status: 'todo',
+      notes: d.notes||'',
+    }));
+    await sb.from('schedules').insert(rows);
+    setSaving(false); onSaved();
+  };
+  return (
+    <FullModal title="スケジュールJSONインポート" onClose={onClose}
+      onSave={list?doImport:null} saveLabel={list?list.length+'件を登録':'登録'} saving={saving}>
+      <p className="text-xs text-slate-500">スケジュールのJSONを貼り付けるかファイルを選択してください。</p>
+      <div className="flex gap-2">
+        <input ref={fileRef} type="file" accept=".json" onChange={onFile} className="hidden"/>
+        <Btn variant="outline" size="sm" onClick={()=>fileRef.current?.click()}>📁 ファイルを選択</Btn>
+      </div>
+      <Txta label="スケジュール JSON" rows={8} value={json} onChange={e=>{setJson(e.target.value);setList(null);}}
+        placeholder='[ { "title": "黒田くん 教育", "scheduled_date": "2026-06-14", "type": "task" } ]'/>
+      <Btn variant="outline" size="sm" onClick={doParse} disabled={!json.trim()}>内容を確認</Btn>
+      {err && <ErrState error={err}/>}
+      {list && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <div className="mb-2 text-sm font-semibold text-emerald-800">{list.length}件を登録します</div>
+          <div className="space-y-1 max-h-52 overflow-y-auto">
+            {list.map((d,i)=><div key={i} className="text-sm text-slate-700">・{d.title} <span className="text-xs text-slate-400">{d.scheduled_date||d.date||''}</span></div>)}
+          </div>
+        </div>
+      )}
+      <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <summary className="cursor-pointer text-xs font-medium text-slate-600">JSON形式の例</summary>
+        <pre className="mt-2 font-mono text-[10px] text-slate-600">{`[
+  {
+    "title": "黒田くん 教育",
+    "scheduled_date": "2026-06-14",
+    "type": "task",
+    "notes": ""
+  }
+]`}</pre>
+      </details>
+    </FullModal>
+  );
+}
+
 // ─── KPI SCREEN ───────────────────────────────────────────
 function KpiScreen() {
   const { sb, user } = useApp();
@@ -3770,7 +4000,7 @@ function AppShell({ children, currentScreen, navTo }) {
     : ['searchRun','candidates','candidateDetail','searchExplore','explore'].includes(rootScreen) ? 'home'
     : ['staffDetail'].includes(rootScreen) ? 'staff'
     : ['quicklog'].includes(rootScreen) ? 'capture'
-    : rootScreen === 'kpi' ? 'home'
+    : ['kpi','calendar'].includes(rootScreen) ? 'home'
     : rootScreen;
 
   return (
@@ -3803,6 +4033,11 @@ function AppShell({ children, currentScreen, navTo }) {
             className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
               activeNav==='schedule' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-100')}>
             <CalendarIcon size={18}/>スケジュール
+          </button>
+          <button onClick={()=>navTo('calendar')}
+            className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+              activeNav==='calendar' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-100')}>
+            <CalendarIcon size={18}/>カレンダー
           </button>
           <button onClick={()=>navTo('kpi')}
             className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
@@ -3907,6 +4142,7 @@ function App() {
       case 'kwDetail':  return <KnowledgeDetailScreen id={id}/>;
       case 'schedule':  return <ScheduleScreen/>;
       case 'kpi':            return <KpiScreen/>;
+      case 'calendar':       return <CalendarScreen/>;
       case 'quicklog':       return <CaptureScreen/>;
       case 'capture':        return <CaptureScreen/>;
       case 'staff':          return <StaffScreen/>;
