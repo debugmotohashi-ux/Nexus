@@ -3079,6 +3079,51 @@ function StaffForm({ initial, onClose, onSaved }) {
   );
 }
 
+// ─── LOG ACCORDION ────────────────────────────────────────
+function LogAccordion({ date, what, why, next, risk, related, urgent, fullContent }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+      {/* 閉じた状態：日付＋whatのサマリ */}
+      <button onClick={()=>setOpen(v=>!v)}
+        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50">
+        <span className="font-mono text-xs text-slate-400 shrink-0">{date}</span>
+        <span className="flex-1 truncate text-sm text-slate-700">{what||'記録'}</span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {urgent && <Badge tone="rose">緊急</Badge>}
+          <ChevronRightIcon size={14} className={cn('text-slate-300 transition-transform', open&&'rotate-90')}/>
+        </div>
+      </button>
+      {/* 開いた状態：詳細 */}
+      {open && (
+        <div className="border-t border-slate-100 px-4 pb-4 pt-3 space-y-2">
+          {why && (
+            <div className="rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
+              <span className="font-semibold">★ なぜ：</span>{why}
+            </div>
+          )}
+          {next && (
+            <div className="text-xs text-slate-600">
+              <span className="font-medium text-slate-400">次：</span>{next}
+            </div>
+          )}
+          {risk && (
+            <div className="text-xs text-amber-600">
+              <span className="font-medium">リスク：</span>{risk}
+            </div>
+          )}
+          {related && (
+            <details className="rounded-lg border border-slate-100">
+              <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-slate-500">関連資料を見る</summary>
+              <pre className="whitespace-pre-wrap px-3 pb-3 pt-1 text-xs text-slate-600 leading-relaxed">{related}</pre>
+            </details>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StaffDetailScreen({ id }) {
   const { sb, user, back, fetchTable, store } = useApp();
   const [st, setSt] = useState(null);
@@ -3195,9 +3240,8 @@ function StaffDetailScreen({ id }) {
         logs.length === 0
           ? <EmptyState message="記録がありません" action={<p className="text-xs text-slate-400 mt-1">Captureから記録を追加してください</p>}/>
           : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {logs.map(log => {
-                // contentから「なぜ」を抽出して強調表示
                 const getField = (c, label) => {
                   const lines = (c||'').split('\n');
                   for(let i=0;i<lines.length;i++){
@@ -3208,20 +3252,20 @@ function StaffDetailScreen({ id }) {
                 const what = getField(log.content, tab==='education'?'何をした':'何を話した');
                 const why = getField(log.content, 'なぜ');
                 const next = getField(log.content, '次どうする');
+                const risk = getField(log.content, 'リスク');
+                const related = log.content?.includes('■ 関連資料') ?
+                  log.content.split('■ 関連資料')[1]?.replace(/^[\s─]+/,'').trim() : null;
                 return (
-                  <div key={log.id} className="rounded-xl border border-slate-200 bg-white p-4">
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-xs font-mono text-slate-400">{log.created_at?.slice(0,10)}</span>
-                      {log.tags?.includes('urgent') && <Badge tone="rose">緊急</Badge>}
-                    </div>
-                    {what && <div className="mb-1 text-sm text-slate-700">{what}</div>}
-                    {why && (
-                      <div className="mb-1 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
-                        <span className="font-medium">なぜ：</span>{why}
-                      </div>
-                    )}
-                    {next && <div className="text-xs text-slate-500">→ {next}</div>}
-                  </div>
+                  <LogAccordion key={log.id}
+                    date={log.created_at?.slice(0,10)}
+                    what={what}
+                    why={why}
+                    next={next}
+                    risk={risk}
+                    related={related}
+                    urgent={log.tags?.includes('urgent')}
+                    fullContent={log.content}
+                  />
                 );
               })}
             </div>
