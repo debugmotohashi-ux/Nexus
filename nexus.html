@@ -663,8 +663,8 @@ function HomeScreen() {
           <div className="flex items-center gap-3">
             <span className="text-2xl">📝</span>
             <div>
-              <div className="text-sm font-semibold text-indigo-800">クイックログ</div>
-              <div className="text-xs text-indigo-500">教育・面談・企画・意思決定を3分で記録</div>
+              <div className="text-sm font-semibold text-indigo-800">Capture</div>
+              <div className="text-xs text-indigo-500">なぜを30秒で保存する</div>
             </div>
           </div>
         </button>
@@ -3196,45 +3196,43 @@ function StaffScreen() {
 // ─── QUICK LOG SCREEN ──────────────────────────────────────
 const LOG_TYPES = {
   education: {
-    label: '教育ログ',
+    label: '教育',
     icon: '📚',
-    color: 'indigo',
     fields: [
-      { key: 'who',     label: '誰に',         placeholder: '黒田くん' },
-      { key: 'theme',   label: 'テーマ',        placeholder: '再現性を意識した教育' },
-      { key: 'insight', label: '気付き・反応',  placeholder: '本人が言語化できるようになった' },
-      { key: 'next',    label: '次回やること',  placeholder: '応用編へ進む' },
+      { key: 'who',    label: '誰に',       placeholder: '黒田くん' },
+      { key: 'what',   label: '何をした',   placeholder: 'クロージングの反論処理を実施' },
+      { key: 'why',    label: 'なぜそうした', placeholder: '自己評価が低いため承認から入る必要があった' },
+      { key: 'next',   label: '次どうする', placeholder: '来週、実践ロープレで確認する' },
     ],
   },
   interview: {
-    label: '面談ログ',
+    label: '面談',
     icon: '💬',
-    color: 'emerald',
     fields: [
-      { key: 'who',    label: '誰と',         placeholder: '飯島さん' },
-      { key: 'issue',  label: '悩み・相談',    placeholder: 'クロージングに苦手意識がある' },
-      { key: 'truth',  label: '本音・核心',    placeholder: '自信のなさが原因。承認が必要な段階' },
-      { key: 'next',   label: '次回アクション', placeholder: '成功体験を1つ作る機会を設ける' },
-    ],
-  },
-  plan: {
-    label: '企画ログ',
-    icon: '💡',
-    color: 'amber',
-    fields: [
-      { key: 'idea',   label: '何を思いついた', placeholder: 'Nexusに週次レビュー機能を追加したい' },
-      { key: 'why',    label: 'なぜ',           placeholder: 'Kazuki Improvementを自動化したいから' },
-      { key: 'effect', label: '期待できる効果', placeholder: '毎週の傾向発見が自動化される' },
+      { key: 'who',    label: '誰に',         placeholder: '飯島さん' },
+      { key: 'what',   label: '何を話した',   placeholder: 'モチベーション低下の背景を確認' },
+      { key: 'why',    label: 'なぜその話をした', placeholder: '数値より先に感情面を整理する必要があると判断' },
+      { key: 'next',   label: '次どうする',   placeholder: '来週フォローと目標の再設定' },
     ],
   },
   decision: {
-    label: '意思決定ログ',
+    label: '判断',
     icon: '⚖️',
-    color: 'rose',
     fields: [
       { key: 'what',   label: '何を決めた', placeholder: 'Mac mini M4 Pro 64GBを購入する' },
-      { key: 'reason', label: '理由',       placeholder: '32Bが快適に動き、コストも最適だから' },
+      { key: 'why',    label: 'なぜそう決めた', placeholder: '32Bが快適に動き、コストも最適だから' },
       { key: 'risk',   label: 'リスク',     placeholder: '70Bが必要になった場合に買い直しが必要' },
+      { key: 'next',   label: '次どうする', placeholder: '来月購入・ブリッジサーバーを構築する' },
+    ],
+  },
+  plan: {
+    label: '企画',
+    icon: '💡',
+    fields: [
+      { key: 'what',   label: '何を考えた', placeholder: 'Nexusに週次レビュー機能を追加したい' },
+      { key: 'why',    label: 'なぜやる',   placeholder: 'Kazuki Improvementを自動化したいから' },
+      { key: 'effect', label: '期待効果',   placeholder: '毎週の傾向発見が自動化される' },
+      { key: 'next',   label: '次どうする', placeholder: 'まず設計をナレッジに書く' },
     ],
   },
 };
@@ -3271,9 +3269,9 @@ function QuickLogScreen() {
 
   return (
     <>
-      <PageHeader title="クイックログ" subtitle="教育後3分で記録する" onBack={back}/>
+      <PageHeader title="Capture" subtitle="30秒で保存。なぜを残す。" onBack={back}/>
       <p className="mb-4 rounded-lg bg-slate-50 border border-slate-100 p-3 text-xs text-slate-500">
-        枠を埋めるだけ。完璧に書かなくていい。1行でも保存する。
+        「なぜ」だけ書けばいい。内容は後から補える。判断理由は今しか書けない。
       </p>
 
       {/* タイプ選択 */}
@@ -3288,15 +3286,23 @@ function QuickLogScreen() {
       </div>
 
       {/* 入力フォーム */}
-      <div className="space-y-4">
-        {cfg.fields.map(f => (
-          <div key={f.key}>
-            <label className="mb-1 block text-sm font-medium text-slate-700">{f.label}</label>
-            <textarea value={fields[f.key] || ''} onChange={upd(f.key)} rows={2}
-              placeholder={f.placeholder}
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm leading-relaxed text-slate-800 placeholder:text-slate-300 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"/>
-          </div>
-        ))}
+      <div className="space-y-3">
+        {cfg.fields.map(f => {
+          const isWhy = f.key === 'why' || f.key === 'risk';
+          return (
+            <div key={f.key}>
+              <label className={cn('mb-1 block text-sm font-medium', isWhy ? 'text-indigo-600' : 'text-slate-700')}>
+                {isWhy && <span className="mr-1">★</span>}{f.label}
+              </label>
+              <textarea value={fields[f.key] || ''} onChange={upd(f.key)} rows={2}
+                placeholder={f.placeholder}
+                className={cn('w-full rounded-xl border p-3 text-sm leading-relaxed text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2',
+                  isWhy
+                    ? 'border-indigo-200 bg-indigo-50 focus:border-indigo-400 focus:ring-indigo-100'
+                    : 'border-slate-200 bg-white focus:border-indigo-400 focus:ring-indigo-100')}/>
+            </div>
+          );
+        })}
       </div>
 
       <div className="mt-5 flex items-center justify-between">
