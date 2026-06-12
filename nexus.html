@@ -1762,14 +1762,23 @@ function KnowledgeImport({ onClose, onSaved }) {
     setSaving(true);
     const VALID_CATS = ['general','workflow','skill_memo','client','market','template','other'];
     const rows = list.map(d=>({
+      ...(d.id?{id:d.id}:{}),
       user_id: user.id,
       title: d.title||'',
       category: VALID_CATS.includes(d.category)?d.category:'general',
       content: d.content||'',
       tags: Array.isArray(d.tags)?d.tags:(d.tags?[d.tags]:[]),
       source_ref: d.source_ref||'JSONインポート',
+      ...(d.staff_id?{staff_id:d.staff_id}:{}),
     }));
-    await sb.from('knowledge_items').insert(rows);
+    // idがあれば上書き更新、なければ新規挿入
+    const toUpdate = rows.filter(r=>r.id);
+    const toInsert = rows.filter(r=>!r.id);
+    for (const r of toUpdate) {
+      const { id, ...rest } = r;
+      await sb.from('knowledge_items').update(rest).eq('id', id).eq('user_id', user.id);
+    }
+    if (toInsert.length > 0) await sb.from('knowledge_items').insert(toInsert);
     setSaving(false); onSaved();
   };
 
@@ -3153,20 +3162,82 @@ function StaffForm({ initial, onClose, onSaved }) {
 }
 
 // ─── LOG ACCORDION ────────────────────────────────────────
-function LogAccordion({ date, what, why, next, risk, related, urgent, fullContent }) {
+function LogAccordion({ date, what, why, next, risk, related, urgent, fullContent, logId, staffId, category, onUpdated }) {
+  const { sb, user } = useApp();
   const [open, setOpen] = useState(false);
+  const [editingDate, setEditingDate] = useState(false);
+  const [newDate, setNewDate] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const fixDate = async () => {
+    if (!newDate || !logId) return;
+    setSaving(true);
+    // contentの実施日を書き換える
+    let updated = fullContent || '';
+    if (updated.includes('■ 実施日')) {
+      updated = updated.replace(/■ 実施日
+[^
+]+/, `■ 実施日
+${newDate}`);
+    } else if (updated.startsWith('【Capture Raw】実施日：')) {
+      const oldPrefix = updated.split('\n')[0]; updated = updated.replace(oldPrefix, `【Capture Raw】実施日：${newDate}`);
+    } else {
+      // 先頭に追加
+      updated = updated.replace('】
+
+', `】
+
+■ 実施日
+${newDate}
+
+`);
+    }
+    await sb.from('knowledge_items').update({ content: updated }).eq('id', logId).eq('user_id', user.id);
+    // スタッフの最終日も更新
+    if (staffId) {
+      const field = category==='education'?'last_education_at':category==='interview'?'last_interview_at':null;
+      if (field) await sb.from('staff_profiles').update({ [field]: newDate }).eq('id', staffId).eq('user_id', user.id);
+    }
+    setSaving(false);
+    setEditingDate(false);
+    if (onUpdated) onUpdated();
+  };
+  // contentから実施日を抽出
+  const actualDateFromContent = (() => {
+    if (!fullContent) return null;
+    const lines = fullContent.split('\n');
+    for (let i=0;i<lines.length;i++){
+      if (lines[i].includes('■ 実施日')) return (lines[i+1]||'').trim() || null;
+      if (lines[i].startsWith('【Capture Raw】実施日：')) return lines[i].split('実施日：')[1]?.slice(0,10) || null;
+    }
+    return null;
+  })();
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
       {/* 閉じた状態：日付＋whatのサマリ */}
-      <button onClick={()=>setOpen(v=>!v)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50">
-        <span className="font-mono text-xs text-slate-400 shrink-0">{date}</span>
-        <span className="flex-1 truncate text-sm text-slate-700">{what||'記録'}</span>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {urgent && <Badge tone="rose">緊急</Badge>}
-          <ChevronRightIcon size={14} className={cn('text-slate-300 transition-transform', open&&'rotate-90')}/>
+      <div className="flex items-center">
+        <button onClick={()=>setOpen(v=>!v)}
+          className="flex-1 flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50">
+          <span className="font-mono text-xs text-slate-400 shrink-0">{actualDateFromContent||date}</span>
+          <span className="flex-1 truncate text-sm text-slate-700">{what||'記録'}</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {urgent && <Badge tone="rose">緊急</Badge>}
+            <ChevronRightIcon size={14} className={cn('text-slate-300 transition-transform', open&&'rotate-90')}/>
+          </div>
+        </button>
+        <button onClick={e=>{e.stopPropagation();setEditingDate(v=>!v);setNewDate(actualDateFromContent||date||'');}}
+          className="px-3 py-3 text-slate-300 hover:text-indigo-500 text-xs">✎</button>
+      </div>
+      {editingDate && (
+        <div className="flex items-center gap-2 px-4 pb-3">
+          <input type="date" value={newDate} onChange={e=>setNewDate(e.target.value)}
+            className="flex-1 rounded-lg border border-indigo-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-300"/>
+          <Btn size="sm" onClick={fixDate} disabled={saving||!newDate}>
+            {saving?'保存中':'修正'}
+          </Btn>
+          <button onClick={()=>setEditingDate(false)} className="text-xs text-slate-400">×</button>
         </div>
-      </button>
+      )}
       {/* 開いた状態：詳細 */}
       {open && (
         <div className="border-t border-slate-100 px-4 pb-4 pt-3 space-y-2">
@@ -3338,6 +3409,10 @@ function StaffDetailScreen({ id }) {
                     related={related}
                     urgent={log.tags?.includes('urgent')}
                     fullContent={log.content}
+                    logId={log.id}
+                    staffId={id}
+                    category={tab}
+                    onUpdated={()=>{ setLogs(prev=>prev.map(l=>l.id===log.id?{...l,_refresh:Date.now()}:l)); setTab(t=>t); }}
                   />
                 );
               })}
@@ -3637,10 +3712,11 @@ function parseCapture(item) {
 }
 
 function CaptureExport({ onClose }) {
-  const { sb, user } = useApp();
+  const { sb, user, store } = useApp();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [days, setDays] = useState(7);
+  const [days, setDays] = useState(30);
+  const [mode, setMode] = useState('chatgpt'); // chatgpt | full
   const [copied, setCopied] = useState(false);
 
   const load = async (d) => {
@@ -3656,32 +3732,74 @@ function CaptureExport({ onClose }) {
   };
   useEffect(()=>{ load(days); },[days]);
 
-  const parsed = useMemo(()=> items.map(parseCapture).map(p=>{
-    // 空フィールドを除去
-    return Object.fromEntries(Object.entries(p).filter(([,v])=>v!==undefined&&v!==''));
-  }), [items]);
+  const staffById = useMemo(()=>{
+    const m = {};
+    (store.staff||[]).forEach(s=>{ m[s.id]=s.name; });
+    return m;
+  }, [store.staff]);
 
-  const json = JSON.stringify(parsed, null, 2);
+  // チャッピー用（日付修正向け）
+  const fullJson = useMemo(()=>{
+    const records = items.map(item => {
+      const p = parseCapture(item);
+      // 関連資料を抽出
+      const related = item.content?.includes('■ 関連資料')
+        ? item.content.split('■ 関連資料')[1]?.replace(/^[\s─]+/,'').trim() || ''
+        : '';
+      return {
+        id: item.id,
+        date: p.date,          // ← チャッピーにここを修正してもらう
+        type: p.type,
+        staff_name: item.staff_id ? (staffById[item.staff_id]||'') : '',
+        staff_id: item.staff_id || '',
+        what: p.what||'',
+        why: p.why||'',
+        related_doc: related,  // ← ここに日付が書かれている
+      };
+    });
+    return records;
+  }, [items, staffById]);
+
+  // チャッピーへ渡すプロンプト付きテキスト
+  const chatgptPrompt = `以下はNexusのCaptureログです。
+各レコードの「related_doc」に記録された内容から実施日を読み取り、
+「date」フィールドをYYYY-MM-DD形式で修正してください。
+
+ルール：
+- related_docに日付が書いてある場合はその日付をdateに設定する
+- related_docに日付がない場合はdateはそのままにする
+- 出力はJSONのみ（説明文不要）
+- idフィールドは必ず保持する
+
+${JSON.stringify(fullJson, null, 2)}`;
+
+  const json = chatgptPrompt;
 
   const copy = async () => {
     try { await navigator.clipboard.writeText(json); setCopied(true); setTimeout(()=>setCopied(false),2000); } catch(e){}
   };
 
   return (
-    <FullModal title="チャッピーに渡す" onClose={onClose}>
+    <FullModal title="Captureエクスポート" onClose={onClose}>
       <p className="text-xs text-slate-500 leading-relaxed">
-        Captureログを日付付きJSONに変換します。そのままチャッピーに貼り付けてください。
+        日付修正用JSONです。チャッピーに渡してdateを修正してもらい、ナレッジのJSONインポートで上書き登録できます。
       </p>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm text-slate-600">直近</span>
-        {[3,7,14,30].map(d=>(
+        {[7,14,30,90].map(d=>(
           <button key={d} onClick={()=>setDays(d)}
             className={cn('rounded-full border px-3 py-1 text-sm font-medium',
               days===d?'border-indigo-600 bg-indigo-600 text-white':'border-slate-200 bg-white text-slate-600')}>
             {d}日
           </button>
         ))}
+        <button onClick={async()=>{
+          setLoading(true);
+          const { data } = await sb.from('knowledge_items').select('*').eq('user_id', user.id).contains('tags', ['capture']).order('created_at',{ascending:false});
+          setItems(data||[]);
+          setLoading(false);
+        }} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-600">全件</button>
       </div>
 
       {loading ? <LoadingState/> : (
@@ -3803,12 +3921,13 @@ function CaptureScreen() {
     if (useStructured && parsed) {
       title = [parsed.who, parsed.what].filter(Boolean).join('：').slice(0, 40) || raw.slice(0, 30);
       categoryVal = parsed.type || 'general';
-      contentVal = buildCaptureContent(parsed) + (relatedDoc.trim() ? `\n\n─────────────────\n■ 関連資料\n${relatedDoc.trim()}` : '');
+      const dateHeader = `■ 実施日\n${actualDate}\n\n`;
+      contentVal = buildCaptureContent(parsed).replace('】\n\n', `】\n\n${dateHeader}`) + (relatedDoc.trim() ? `\n\n─────────────────\n■ 関連資料\n${relatedDoc.trim()}` : '');
       tagsVal = ['capture', 'raw_log', parsed.type || '', ...(isUrgent?['urgent']:[])];
     } else {
       title = raw.slice(0, 40);
       categoryVal = linkedStaffId ? quickCategory : 'general';
-      contentVal = `【Capture Raw】\n\n${raw}` + (relatedDoc.trim() ? `\n\n─────────────────\n■ 関連資料\n${relatedDoc.trim()}` : '');
+      contentVal = `【Capture Raw】実施日：${actualDate}\n\n${raw}` + (relatedDoc.trim() ? `\n\n─────────────────\n■ 関連資料\n${relatedDoc.trim()}` : '');
       tagsVal = ['capture', 'raw_log', ...(linkedStaffId?[quickCategory]:[]), ...(isUrgent?['urgent']:[])];
     }
     await sb.from('knowledge_items').insert({
