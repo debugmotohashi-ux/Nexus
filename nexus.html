@@ -571,7 +571,7 @@ function HomeScreen() {
     const ivScheduled = needsIv.filter(s =>   s.next_interview_at);
     const weekEvents = (store.schedules||[]).filter(s=>s.status==='todo').flatMap(s => {
       const du = daysUntilDate(s.scheduled_date);
-      if (du === null || du < 0 || du > 7) return [];
+      if (du === null || du < 0 || du > 4) return [];
       return [{ title:s.title, type:s.category||'task', assignee:s.assignee||'', date:s.scheduled_date, daysUntil:du }];
     }).sort((a,b)=>a.daysUntil-b.daysUntil);
     return { edNoSched, edScheduled, ivNoSched, ivScheduled, weekEvents };
@@ -615,18 +615,40 @@ function HomeScreen() {
           {staffFollow.ivScheduled.map(s=><div key={s.name} className="text-xs text-amber-600">💬 {s.name}：{s.next_interview_at}</div>)}
         </button>
       )}
-      {staffFollow.weekEvents.length > 0 && (
-        <button onClick={()=>nav('calendar')} className="mb-3 w-full rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-left space-y-1">
-          <div className="text-xs font-bold text-indigo-700">🗓 今週の予定</div>
-          {staffFollow.weekEvents.slice(0,6).map((e,i)=>(
-            <div key={i} className="flex items-center gap-1.5 text-xs text-indigo-600">
-              <span>{e.type==='education'?'📚':e.type==='interview'?'💬':'✅'} {e.title}</span>
-              {e.assignee && <span className="rounded bg-indigo-200 px-1.5 py-0.5 text-[10px] text-indigo-700">担当:{e.assignee}</span>}
-              <span className="ml-auto text-indigo-400">{e.daysUntil===0?'今日':e.daysUntil===1?'明日':e.date.slice(5)}</span>
+      {staffFollow.weekEvents.length > 0 && (() => {
+        const now = new Date(); now.setHours(0,0,0,0);
+        const end = new Date(now); end.setDate(now.getDate()+4);
+        const fmt = (d) => `${d.getMonth()+1}/${d.getDate()}`;
+        const rangeLabel = `${fmt(now)}〜${fmt(end)}`;
+        return (
+          <div className="mb-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-600">🗓 直近の予定</span>
+              <button onClick={()=>nav('calendar')} className="text-xs text-indigo-500">{rangeLabel} →</button>
             </div>
-          ))}
-        </button>
-      )}
+            <div className="flex gap-2 overflow-x-auto pb-1" style={{scrollbarWidth:'none'}}>
+              {staffFollow.weekEvents.map((e,i)=>{
+                const dayLabel = e.daysUntil===0?'今日':e.daysUntil===1?'明日':`${new Date(e.date+'T12:00:00').getMonth()+1}/${new Date(e.date+'T12:00:00').getDate()}`;
+                const toneCard = e.type==='education'?'border-indigo-200 bg-indigo-50':
+                  e.type==='interview'?'border-emerald-200 bg-emerald-50':
+                  e.daysUntil===0?'border-amber-200 bg-amber-50':'border-slate-200 bg-white';
+                const toneText = e.type==='education'?'text-indigo-700':
+                  e.type==='interview'?'text-emerald-700':
+                  e.daysUntil===0?'text-amber-700':'text-slate-700';
+                const icon = e.type==='education'?'📚':e.type==='interview'?'💬':'✅';
+                return (
+                  <button key={i} onClick={()=>nav('calendar')}
+                    className={cn('shrink-0 rounded-xl border p-3 text-left w-28', toneCard)}>
+                    <div className={cn('text-xs font-bold mb-1', toneText)}>{dayLabel}</div>
+                    <div className="text-xs text-slate-700 leading-snug line-clamp-2">{icon} {e.title}</div>
+                    {e.assignee && <div className="mt-1 text-[10px] text-slate-400 truncate">担:{e.assignee}</div>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* アクションランチャー */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
