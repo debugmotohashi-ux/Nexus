@@ -3817,6 +3817,14 @@ function CaptureBatchImport({ onClose }) {
     try { await navigator.clipboard.writeText(PROMPT_TEXT); setPromptCopied(true); setTimeout(()=>setPromptCopied(false),2000); } catch(e){}
   };
 
+  const fileRef = useRef(null);
+  const onFile = (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const r = new FileReader();
+    r.onload = () => { setJson(String(r.result||'')); setList(null); setErr(''); };
+    r.readAsText(file);
+  };
+
   const doParse = () => {
     setErr('');
     try {
@@ -3904,8 +3912,13 @@ function CaptureBatchImport({ onClose }) {
           </div>
 
           {/* チャッピーの返答を貼る */}
-          <div className="text-xs font-semibold text-slate-600">② チャッピーが返したJSONを貼り付け</div>
-          <Txta label="" rows={8} value={json} onChange={e=>{setJson(e.target.value);setList(null);}}
+          <div className="text-xs font-semibold text-slate-600">② JSONを貼り付け or ファイル選択</div>
+          <div className="flex gap-2">
+            <input ref={fileRef} type="file" accept=".json" onChange={onFile} className="hidden"/>
+            <Btn variant="outline" size="sm" onClick={()=>fileRef.current?.click()}>📁 ファイルを選択</Btn>
+            {json && <span className="text-xs text-slate-400 self-center">{json.length.toLocaleString()}文字</span>}
+          </div>
+          <Txta label="" rows={6} value={json} onChange={e=>{setJson(e.target.value);setList(null);}}
             placeholder='[ { "date": "2026-05-15", "staff_name": "黒田くん", "category": "education", "title": "...", "related_doc": "..." } ]'/>
           <Btn variant="outline" size="sm" onClick={doParse} disabled={!json.trim()}>内容を確認</Btn>
           {err && <ErrState error={err}/>}
