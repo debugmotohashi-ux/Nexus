@@ -4228,15 +4228,39 @@ function ScheduleImport({ onClose, onSaved }) {
   };
   const doImport = async () => {
     setSaving(true);
+    const validCats = Object.keys(SCHED_CATS);
     const rows = list.map(d=>({
       user_id: user.id,
       title: d.title||'',
-      type: ['task','meeting','deadline','other'].includes(d.type)?d.type:'task',
-      scheduled_date: d.scheduled_date||d.date||null,
+      type: 'meeting',
+      category: validCats.includes(d.category) ? d.category : (validCats.includes(d.type) ? d.type : 'other'),
+      staff_name: d.staff_name || '',
+      assignee: d.assignee || '',
+      scheduled_date: d.scheduled_date || d.date || null,
       status: 'todo',
-      notes: d.notes||'',
+      notes: d.notes || '',
     }));
     await sb.from('schedules').insert(rows);
+
+    // スタッフの次回日程を自動同期（教育/面談・最も近い未来の日付）
+    const { data: staffList } = await sb.from('staff_profiles').select('id,name').eq('user_id', user.id);
+    if (staffList) {
+      const today = localIso(new Date());
+      const eduMap = {}, ivMap = {};
+      rows.forEach(r => {
+        if (!r.staff_name || !r.scheduled_date || r.scheduled_date < today) return;
+        const hit = staffList.find(p => r.staff_name.includes(p.name) || p.name.includes(r.staff_name));
+        if (!hit) return;
+        if (r.category === 'education') {
+          if (!eduMap[hit.id] || r.scheduled_date < eduMap[hit.id]) eduMap[hit.id] = r.scheduled_date;
+        } else if (r.category === 'interview') {
+          if (!ivMap[hit.id] || r.scheduled_date < ivMap[hit.id]) ivMap[hit.id] = r.scheduled_date;
+        }
+      });
+      for (const [id, date] of Object.entries(eduMap)) await sb.from('staff_profiles').update({ next_education_at: date }).eq('id', id).eq('user_id', user.id);
+      for (const [id, date] of Object.entries(ivMap))  await sb.from('staff_profiles').update({ next_interview_at: date }).eq('id', id).eq('user_id', user.id);
+    }
+
     setSaving(false); onSaved();
   };
   return (
@@ -4248,14 +4272,22 @@ function ScheduleImport({ onClose, onSaved }) {
         <Btn variant="outline" size="sm" onClick={()=>fileRef.current?.click()}>📁 ファイルを選択</Btn>
       </div>
       <Txta label="スケジュール JSON" rows={8} value={json} onChange={e=>{setJson(e.target.value);setList(null);}}
-        placeholder='[ { "title": "黒田くん 教育", "scheduled_date": "2026-06-14", "type": "task" } ]'/>
+        placeholder='[ { "title": "黒田 教育", "category": "education", "scheduled_date": "2026-06-14", "assignee": "本橋", "staff_name": "黒田" } ]'/>
       <Btn variant="outline" size="sm" onClick={doParse} disabled={!json.trim()}>内容を確認</Btn>
       {err && <ErrState error={err}/>}
       {list && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
           <div className="mb-2 text-sm font-semibold text-emerald-800">{list.length}件を登録します</div>
           <div className="space-y-1 max-h-52 overflow-y-auto">
-            {list.map((d,i)=><div key={i} className="text-sm text-slate-700">・{d.title} <span className="text-xs text-slate-400">{d.scheduled_date||d.date||''}</span></div>)}
+            {list.map((d,i)=>{
+              const c = SCHED_CATS[d.category]||SCHED_CATS.other;
+              return <div key={i} className="flex items-center gap-2 text-sm text-slate-700">
+                <span className={cn('shrink-0 rounded px-1.5 py-0.5 text-[10px]', c.card, c.head)}>{c.icon}{c.label}</span>
+                <span className="flex-1 truncate">{d.title}</span>
+                {d.assignee && <span className="text-[10px] text-slate-400">担:{d.assignee}</span>}
+                <span className="text-xs text-slate-400 shrink-0">{(d.scheduled_date||d.date||'').slice(5)}</span>
+              </div>;
+            })}
           </div>
         </div>
       )}
