@@ -3172,30 +3172,23 @@ function LogAccordion({ date, what, why, next, risk, related, urgent, fullConten
   const fixDate = async () => {
     if (!newDate || !logId) return;
     setSaving(true);
-    // contentの実施日を書き換える
-    let updated = fullContent || '';
-    if (updated.includes('■ 実施日')) {
-      updated = updated.replace(/■ 実施日
-[^
-]+/, `■ 実施日
-${newDate}`);
-    } else if (updated.startsWith('【Capture Raw】実施日：')) {
-      const oldPrefix = updated.split('\n')[0]; updated = updated.replace(oldPrefix, `【Capture Raw】実施日：${newDate}`);
+    // contentの実施日を行単位で書き換える（regex不使用）
+    const lines = (fullContent || '').split('\n');
+    let replaced = false;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes('■ 実施日')) { lines[i+1] = newDate; replaced = true; break; }
+      if (lines[i].indexOf('【Capture Raw】実施日：') === 0) { lines[i] = '【Capture Raw】実施日：' + newDate; replaced = true; break; }
+    }
+    let updated;
+    if (replaced) {
+      updated = lines.join('\n');
     } else {
-      // 先頭に追加
-      updated = updated.replace('】
-
-', `】
-
-■ 実施日
-${newDate}
-
-`);
+      updated = '■ 実施日' + '\n' + newDate + '\n\n' + (fullContent || '');
     }
     await sb.from('knowledge_items').update({ content: updated }).eq('id', logId).eq('user_id', user.id);
     // スタッフの最終日も更新
     if (staffId) {
-      const field = category==='education'?'last_education_at':category==='interview'?'last_interview_at':null;
+      const field = category==='education' ? 'last_education_at' : category==='interview' ? 'last_interview_at' : null;
       if (field) await sb.from('staff_profiles').update({ [field]: newDate }).eq('id', staffId).eq('user_id', user.id);
     }
     setSaving(false);
@@ -3277,6 +3270,7 @@ function StaffDetailScreen({ id }) {
   const [tab, setTab] = useState('profile'); // profile | education | interview
   const [logs, setLogs] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [logVer, setLogVer] = useState(0);
 
   const load = async () => {
     const { data } = await sb.from('staff_profiles').select('*').eq('id', id).eq('user_id', user.id).single();
@@ -3292,7 +3286,7 @@ function StaffDetailScreen({ id }) {
     sb.from('knowledge_items').select('*').eq('user_id', user.id).eq('staff_id', id).eq('category', cat)
       .order('created_at', { ascending: false })
       .then(({ data }) => { setLogs(data||[]); setLogsLoading(false); });
-  }, [tab, id]);
+  }, [tab, id, logVer]);
 
   const today = () => localIso();
   const mark = async (field) => {
@@ -3412,7 +3406,7 @@ function StaffDetailScreen({ id }) {
                     logId={log.id}
                     staffId={id}
                     category={tab}
-                    onUpdated={()=>{ setLogs(prev=>prev.map(l=>l.id===log.id?{...l,_refresh:Date.now()}:l)); setTab(t=>t); }}
+                    onUpdated={()=>setLogVer(v=>v+1)}
                   />
                 );
               })}
