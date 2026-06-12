@@ -3336,12 +3336,26 @@ function StaffScreen() {
   };
   useEffect(() => { load(); }, []);
 
-  const needsFollow = staff.filter(s => s.is_active && (daysSince(s.last_education_at) === null || daysSince(s.last_education_at) >= 14));
+  const staffAlerts = useMemo(() => {
+    const t = new Date(); t.setHours(0,0,0,0);
+    const ds = (iso) => { if (!iso) return 999; const d=new Date(iso); d.setHours(0,0,0,0); return Math.round((t-d)/86400000); };
+    const active = staff.filter(s => s.is_active);
+    const needsEdu = active.filter(s => ds(s.last_education_at) >= 14);
+    const needsIv  = active.filter(s => ds(s.last_interview_at) >= 30);
+    return {
+      edNoSched:   needsEdu.filter(s => !s.next_education_at),
+      edScheduled: needsEdu.filter(s =>  s.next_education_at),
+      ivNoSched:   needsIv.filter(s =>  !s.next_interview_at),
+      ivScheduled: needsIv.filter(s =>   s.next_interview_at),
+      total: needsEdu.length + needsIv.length,
+    };
+  }, [staff]);
 
   if (loading) return <LoadingState/>;
   return (
     <>
-      <PageHeader title="スタッフ" subtitle={`${staff.filter(s=>s.is_active).length}名 / フォロー要 ${needsFollow.length}名`}
+      <PageHeader title="スタッフ"
+        subtitle={`${staff.filter(s=>s.is_active).length}名 / フォロー要 ${staffAlerts.total}名`}
         action={
           <div className="flex gap-2">
             <Btn variant="outline" size="sm" onClick={()=>setShowImport(true)}>📥 JSON</Btn>
@@ -3349,10 +3363,18 @@ function StaffScreen() {
           </div>
         }/>
 
-      {needsFollow.length > 0 && (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
-          <div className="text-xs font-semibold text-amber-700 mb-1">教育フォローが空いています</div>
-          <div className="text-xs text-amber-600">{needsFollow.map(s=>s.name).join('・')}</div>
+      {(staffAlerts.edNoSched.length > 0 || staffAlerts.ivNoSched.length > 0) && (
+        <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 space-y-1.5">
+          <div className="text-xs font-bold text-rose-600">⚠️ フォロー必要（予定なし）</div>
+          {staffAlerts.edNoSched.length > 0 && <div className="text-xs text-rose-500">📚 教育：{staffAlerts.edNoSched.map(s=>s.name).join('・')}</div>}
+          {staffAlerts.ivNoSched.length > 0 && <div className="text-xs text-rose-500">💬 面談：{staffAlerts.ivNoSched.map(s=>s.name).join('・')}</div>}
+        </div>
+      )}
+      {(staffAlerts.edScheduled.length > 0 || staffAlerts.ivScheduled.length > 0) && (
+        <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-1.5">
+          <div className="text-xs font-bold text-amber-700">📅 フォロー必要（予定あり）</div>
+          {staffAlerts.edScheduled.map(s=><div key={s.id} className="text-xs text-amber-600">📚 {s.name}：{s.next_education_at}</div>)}
+          {staffAlerts.ivScheduled.map(s=><div key={s.id} className="text-xs text-amber-600">💬 {s.name}：{s.next_interview_at}</div>)}
         </div>
       )}
 
@@ -3797,7 +3819,8 @@ const SCHED_CATS = {
   deadline:  { label:'締切',      icon:'⏰', card:'border-rose-300 bg-rose-100', head:'text-rose-600', dot:'bg-rose-500' },
   report:    { label:'報告',      icon:'📝', card:'border-sky-300 bg-sky-100', head:'text-sky-700', dot:'bg-sky-500' },
   training:  { label:'研修',      icon:'🎯', card:'border-blue-300 bg-blue-100', head:'text-blue-700', dot:'bg-blue-500' },
-  other:     { label:'その他',    icon:'○',  card:'border-slate-200 bg-slate-50', head:'text-slate-500', dot:'bg-slate-400' },
+  task:      { label:'タスク',    icon:'✅', card:'border-slate-200 bg-white',   head:'text-slate-700', dot:'bg-slate-400' },
+  other:     { label:'その他',    icon:'○',  card:'border-slate-200 bg-slate-50', head:'text-slate-500', dot:'bg-slate-300' },
 };
 function schedCat(s) { return SCHED_CATS[s?.category] || SCHED_CATS[s?.type] || SCHED_CATS.other; }
 
@@ -3815,6 +3838,44 @@ function CalendarScreen() {
 
   const load = async () => { await fetchTable('staff'); await fetchTable('schedules'); };
   useEffect(()=>{ load(); },[]);
+
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState('');
+
+  // 既存スケジュールからスタッフ日程を一括同期
+  const bulkSyncStaff = async () => {
+    setSyncing(true); setSyncResult('');
+    const scheds = store.schedules.filter(s =>
+      s.status === 'todo' && s.staff_name && (s.category === 'education' || s.category === 'interview')
+    );
+    const { data: staffList } = await sb.from('staff_profiles').select('id,name').eq('user_id', user.id);
+    if (!staffList) { setSyncing(false); return; }
+
+    // スタッフごとに最も近い予定日を取得
+    const eduMap = {}, ivMap = {};
+    scheds.forEach(s => {
+      const hit = staffList.find(p => s.staff_name.includes(p.name) || p.name.includes(s.staff_name));
+      if (!hit || !s.scheduled_date) return;
+      if (s.category === 'education') {
+        if (!eduMap[hit.id] || s.scheduled_date < eduMap[hit.id]) eduMap[hit.id] = s.scheduled_date;
+      } else {
+        if (!ivMap[hit.id] || s.scheduled_date < ivMap[hit.id]) ivMap[hit.id] = s.scheduled_date;
+      }
+    });
+
+    let count = 0;
+    for (const [id, date] of Object.entries(eduMap)) {
+      await sb.from('staff_profiles').update({ next_education_at: date }).eq('id', id).eq('user_id', user.id);
+      count++;
+    }
+    for (const [id, date] of Object.entries(ivMap)) {
+      await sb.from('staff_profiles').update({ next_interview_at: date }).eq('id', id).eq('user_id', user.id);
+      count++;
+    }
+    await fetchTable('staff');
+    setSyncing(false);
+    setSyncResult(`${count}件のスタッフ日程を更新しました`);
+  };
 
   const events = useMemo(()=>{
     const evs = [];
@@ -3918,8 +3979,13 @@ function CalendarScreen() {
       <PageHeader title="カレンダー"
         action={<div className="flex gap-2">
           <Btn variant="outline" size="sm" onClick={()=>setShowImport(true)}>📥 JSON</Btn>
-          <Btn size="sm" onClick={()=>setAddDate(isoStr(today))}><PlusIcon size={14}/> 追加</Btn>
+          <Btn size="sm" onClick={()=>setAddDate(localIso(today))}><PlusIcon size={14}/> 追加</Btn>
         </div>}/>
+      {syncResult && <p className="mb-2 text-xs text-emerald-600">{syncResult}</p>}
+      <button onClick={bulkSyncStaff} disabled={syncing}
+        className="mb-3 w-full rounded-lg border border-dashed border-indigo-200 bg-indigo-50 py-2 text-xs font-medium text-indigo-600 disabled:opacity-40">
+        {syncing ? '同期中...' : '🔄 スケジュールからスタッフ日程を一括同期'}
+      </button>
 
       <div className="mb-4 flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
         {[{k:'week',l:'週'},{k:'month',l:'月'}].map(({k,l})=>(
@@ -4017,7 +4083,7 @@ function CalendarAddModal({ date, onClose, onSaved }) {
   const { sb, user } = useApp();
   const [title, setTitle] = useState('');
   const [type, setType] = useState('task');
-  const [category, setCategory] = useState('task'); // education/interview/task
+  const [category, setCategory] = useState('education'); // education/interview/task
   const [staffName, setStaffName] = useState('');
   const [assignee, setAssignee] = useState('');
   const [staffList, setStaffList] = useState([]);
@@ -4049,6 +4115,17 @@ function CalendarAddModal({ date, onClose, onSaved }) {
       category, staff_name: staffName, assignee,
       scheduled_date:scheduledDate||null, status:'todo', notes
     });
+    // スタッフの次回日程を自動更新
+    if (staffName && scheduledDate) {
+      const field = category==='education'?'next_education_at':category==='interview'?'next_interview_at':null;
+      if (field) {
+        const { data: matched } = await sb.from('staff_profiles').select('id,name').eq('user_id', user.id);
+        if (matched) {
+          const hit = matched.find(s => staffName.includes(s.name) || s.name.includes(staffName));
+          if (hit) await sb.from('staff_profiles').update({ [field]: scheduledDate }).eq('id', hit.id).eq('user_id', user.id);
+        }
+      }
+    }
     setSaving(false); onSaved();
   };
   return (
@@ -4091,6 +4168,17 @@ function CalendarEditModal({ item, onClose, onSaved }) {
   const save = async () => {
     setSaving(true);
     await sb.from('schedules').update({ title:title.trim(), type, assignee, scheduled_date:scheduledDate||null, notes }).eq('id',item.id).eq('user_id',user.id);
+    // スタッフ日程も更新
+    if (item.staff_name && scheduledDate) {
+      const field = item.category==='education'?'next_education_at':item.category==='interview'?'next_interview_at':null;
+      if (field) {
+        const { data: matched } = await sb.from('staff_profiles').select('id,name').eq('user_id', user.id);
+        if (matched) {
+          const hit = matched.find(s => item.staff_name.includes(s.name) || s.name.includes(item.staff_name));
+          if (hit) await sb.from('staff_profiles').update({ [field]: scheduledDate }).eq('id', hit.id).eq('user_id', user.id);
+        }
+      }
+    }
     setSaving(false); onSaved();
   };
   const del = async () => {
