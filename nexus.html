@@ -3251,6 +3251,7 @@ function CaptureScreen() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [step, setStep] = useState(1); // 1:input 2:bridge 3:preview
+  const [relatedDoc, setRelatedDoc] = useState('');
 
   const generate = () => {
     if (!raw.trim()) return;
@@ -3282,12 +3283,12 @@ function CaptureScreen() {
     if (useStructured && parsed) {
       title = [parsed.who, parsed.what].filter(Boolean).join('：').slice(0, 40) || raw.slice(0, 30);
       categoryVal = parsed.type || 'general';
-      contentVal = buildCaptureContent(parsed);
+      contentVal = buildCaptureContent(parsed) + (relatedDoc.trim() ? `\n\n─────────────────\n■ 関連資料\n${relatedDoc.trim()}` : '');
       tagsVal = ['capture', 'raw_log', parsed.type || ''];
     } else {
       title = raw.slice(0, 40);
       categoryVal = 'general';
-      contentVal = `【Capture Raw】\n\n${raw}`;
+      contentVal = `【Capture Raw】\n\n${raw}` + (relatedDoc.trim() ? `\n\n─────────────────\n■ 関連資料\n${relatedDoc.trim()}` : '');
       tagsVal = ['capture', 'raw_log'];
     }
     await sb.from('knowledge_items').insert({
@@ -3295,7 +3296,7 @@ function CaptureScreen() {
       content: contentVal, tags: tagsVal, source_ref: 'Nexus Capture',
     });
     setSaving(false); setSaved(true);
-    setRaw(''); setPrompt(''); setReply(''); setParsed(null); setStep(1);
+    setRaw(''); setPrompt(''); setReply(''); setParsed(null); setStep(1); setRelatedDoc('');
   };
 
   return (
@@ -3316,6 +3317,21 @@ function CaptureScreen() {
           rows={6}
           placeholder={`例：\n黒田くん\n再現性教育を実施した\n成功体験はあるが再現できていないため\n次回は応用編へ進む`}
           className="w-full rounded-xl border-2 border-indigo-200 bg-white p-4 text-sm leading-relaxed text-slate-800 placeholder:text-slate-300 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+        />
+      </div>
+
+      {/* 関連資料（任意） */}
+      <div className="mb-4">
+        <label className="mb-1.5 block text-sm font-medium text-slate-600">
+          📎 関連資料（任意）
+        </label>
+        <p className="mb-1.5 text-xs text-slate-400">教育共有文・面談共有文・文字起こし・企画書などをそのまま貼り付け</p>
+        <textarea
+          value={relatedDoc}
+          onChange={e => setRelatedDoc(e.target.value)}
+          rows={4}
+          placeholder="教育共有文・面談共有文・文字起こしなどを貼り付け（なければ空欄でOK）"
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-800 placeholder:text-slate-300 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
         />
       </div>
 
@@ -3372,6 +3388,12 @@ function CaptureScreen() {
               <div className="text-sm text-slate-800">{r.value}</div>
             </div>
           ))}
+          {relatedDoc.trim() && (
+            <div>
+              <div className="text-xs font-medium text-slate-400">関連資料</div>
+              <div className="text-xs text-slate-600 line-clamp-2">{relatedDoc.slice(0, 80)}…</div>
+            </div>
+          )}
           {saved && <span className="block text-sm text-emerald-600">保存しました ✓</span>}
           <Btn className="w-full" onClick={() => save(true)} disabled={saving}>
             <SaveIcon size={14}/> {saving ? '保存中…' : 'Raw Logsに保存'}
