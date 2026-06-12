@@ -3877,10 +3877,16 @@ function CaptureScreen() {
         />
       </div>
 
-      {/* スタッフ紐づけ（そのまま保存 用） */}
+      {/* スタッフ紐づけ＋実施日（そのまま保存 用） */}
       {raw.trim() && step === 1 && (
-        <div className="mb-3 flex items-center gap-2">
-          <label className="text-xs text-slate-500 shrink-0">スタッフ</label>
+        <div className="mb-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500 shrink-0 w-12">実施日</label>
+            <input type="date" value={actualDate} onChange={e=>setActualDate(e.target.value)}
+              className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-300"/>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500 shrink-0 w-12">スタッフ</label>
           <select value={linkedStaffId||''} onChange={e=>setLinkedStaffId(e.target.value||null)}
             className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-300">
             <option value="">紐づけなし</option>
@@ -3905,6 +3911,7 @@ function CaptureScreen() {
               <option value="urgent">緊急</option>
             </select>
           )}
+          </div>
         </div>
       )}
 
