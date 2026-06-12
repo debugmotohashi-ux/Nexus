@@ -1312,17 +1312,28 @@ function SkillForm({ initial, categories, onClose, onSaved }) {
 // ─── SKILL JSON HELPERS ───────────────────────────────────
 function cleanJsonInput(raw) {
   let s = raw;
-  // 1. 前後の空白・改行を除去
   s = s.trim();
-  // 2. BOM・不可視文字・ゼロ幅スペースを除去
   s = s.replace(/^\uFEFF/, '').replace(/[\u200B\u200C\u200D\u00A0\u2060]/g, '');
-  // 3. スマートクォート（Wordやメモ帳由来）を通常クォートに変換
   s = s.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'");
-  // 4. ```json ... ``` または ``` ... ``` のMarkdownフェンスを除去（改行・スペースも含む）
   s = s.replace(/^```(?:json)?[\s\r\n]*/i, '').replace(/[\s\r\n]*```\s*$/, '');
-  // 5. 再度trim
   s = s.trim();
-  return s;
+  // まず通常のパースを試みる
+  try { JSON.parse(s); return s; } catch(e) {}
+  // 失敗した場合：JSON文字列値の中にある生の改行を \n に変換する
+  let result = '';
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (escape) { result += ch; escape = false; continue; }
+    if (ch === '\\') { result += ch; escape = true; continue; }
+    if (ch === '"') { inString = !inString; result += ch; continue; }
+    if (inString && ch === '\n') { result += '\\n'; continue; }
+    if (inString && ch === '\r') { result += '\\r'; continue; }
+    if (inString && ch === '\t') { result += '\\t'; continue; }
+    result += ch;
+  }
+  return result;
 }
 function getJsonErrDetail(cleaned, err) {
   const msg = err.message || '';
