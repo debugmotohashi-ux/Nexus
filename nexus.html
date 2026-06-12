@@ -3193,125 +3193,193 @@ function StaffScreen() {
   );
 }
 
-// ─── QUICK LOG SCREEN ──────────────────────────────────────
-const LOG_TYPES = {
-  education: {
-    label: '教育',
-    icon: '📚',
-    fields: [
-      { key: 'who',    label: '誰に',       placeholder: '黒田くん' },
-      { key: 'what',   label: '何をした',   placeholder: 'クロージングの反論処理を実施' },
-      { key: 'why',    label: 'なぜそうした', placeholder: '自己評価が低いため承認から入る必要があった' },
-      { key: 'next',   label: '次どうする', placeholder: '来週、実践ロープレで確認する' },
-    ],
-  },
-  interview: {
-    label: '面談',
-    icon: '💬',
-    fields: [
-      { key: 'who',    label: '誰に',         placeholder: '飯島さん' },
-      { key: 'what',   label: '何を話した',   placeholder: 'モチベーション低下の背景を確認' },
-      { key: 'why',    label: 'なぜその話をした', placeholder: '数値より先に感情面を整理する必要があると判断' },
-      { key: 'next',   label: '次どうする',   placeholder: '来週フォローと目標の再設定' },
-    ],
-  },
-  decision: {
-    label: '判断',
-    icon: '⚖️',
-    fields: [
-      { key: 'what',   label: '何を決めた', placeholder: 'Mac mini M4 Pro 64GBを購入する' },
-      { key: 'why',    label: 'なぜそう決めた', placeholder: '32Bが快適に動き、コストも最適だから' },
-      { key: 'risk',   label: 'リスク',     placeholder: '70Bが必要になった場合に買い直しが必要' },
-      { key: 'next',   label: '次どうする', placeholder: '来月購入・ブリッジサーバーを構築する' },
-    ],
-  },
-  plan: {
-    label: '企画',
-    icon: '💡',
-    fields: [
-      { key: 'what',   label: '何を考えた', placeholder: 'Nexusに週次レビュー機能を追加したい' },
-      { key: 'why',    label: 'なぜやる',   placeholder: 'Kazuki Improvementを自動化したいから' },
-      { key: 'effect', label: '期待効果',   placeholder: '毎週の傾向発見が自動化される' },
-      { key: 'next',   label: '次どうする', placeholder: 'まず設計をナレッジに書く' },
-    ],
-  },
+// ─── CAPTURE SCREEN ──────────────────────────────────────
+const CAPTURE_EXTRACT_PROMPT = (raw) => `以下のメモから情報を抽出し、ログタイプに分類してください。
+
+## メモ
+${raw}
+
+## 出力ルール
+- typeはeducation/interview/decision/planのどれか1つ
+- whoは対象者（面談・教育の場合。なければ空文字）
+- whatは何をした・何を話した・何を決めた・何を考えた
+- whyはなぜそうしたか（最重要。必ず埋めること）
+- riskはリスク（判断の場合のみ。それ以外は空文字）
+- effectは期待効果（企画の場合のみ。それ以外は空文字）
+- nextは次どうする
+
+説明なしで以下のJSONのみ出力してください：
+{
+  "type": "education",
+  "who": "",
+  "what": "",
+  "why": "",
+  "risk": "",
+  "effect": "",
+  "next": ""
+}`;
+
+const CAPTURE_TYPE_LABELS = {
+  education: '📚 教育ログ',
+  interview: '💬 面談ログ',
+  decision:  '⚖️ 判断ログ',
+  plan:      '💡 企画ログ',
 };
 
-function QuickLogScreen() {
+function buildCaptureContent(p) {
+  const type = CAPTURE_TYPE_LABELS[p.type] || p.type;
+  const rows = [];
+  if (p.who)    rows.push(`■ 誰に\n${p.who}`);
+  if (p.what)   rows.push(`■ ${p.type==='decision'?'何を決めた':p.type==='plan'?'何を考えた':'何をした'}\n${p.what}`);
+  if (p.why)    rows.push(`■ なぜ\n${p.why}`);
+  if (p.risk)   rows.push(`■ リスク\n${p.risk}`);
+  if (p.effect) rows.push(`■ 期待効果\n${p.effect}`);
+  if (p.next)   rows.push(`■ 次どうする\n${p.next}`);
+  return `【${type}】\n\n${rows.join('\n\n')}`;
+}
+
+function CaptureScreen() {
   const { sb, user, back } = useApp();
-  const [type, setType] = useState('education');
-  const [fields, setFields] = useState({});
+  const [raw, setRaw] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [reply, setReply] = useState('');
+  const [parsed, setParsed] = useState(null);
+  const [parseErr, setParseErr] = useState('');
+  const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [step, setStep] = useState(1); // 1:input 2:bridge 3:preview
 
-  const cfg = LOG_TYPES[type];
-  const upd = k => e => { setFields(v => ({ ...v, [k]: e.target.value })); setSaved(false); };
-
-  const buildContent = () => {
-    const lines = cfg.fields.map(f => `■ ${f.label}\n${fields[f.key] || '（未入力）'}`);
-    return `【${cfg.label}】\n\n${lines.join('\n\n')}`;
+  const generate = () => {
+    if (!raw.trim()) return;
+    setPrompt(CAPTURE_EXTRACT_PROMPT(raw));
+    setStep(2);
+    setParsed(null); setParseErr(''); setReply(''); setSaved(false);
   };
 
-  const save = async () => {
-    const filled = cfg.fields.filter(f => fields[f.key]?.trim());
-    if (filled.length === 0) return;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch(e) {}
+  };
+
+  const doParse = () => {
+    setParseErr('');
+    try {
+      const cleaned = cleanJsonInput(reply);
+      const obj = JSON.parse(cleaned);
+      if (!obj || !obj.type) { setParseErr('typeが見つかりません。JSONのみ貼り付けてください。'); return; }
+      setParsed(obj);
+      setStep(3);
+    } catch(e) {
+      setParseErr('JSONとして読み取れませんでした。Claudeの回答のJSON部分だけを貼り付けてください。');
+    }
+  };
+
+  const save = async (useStructured = true) => {
     setSaving(true);
-    const title = `${cfg.label}：${fields[cfg.fields[0].key] || ''}`;
+    let title, categoryVal, contentVal, tagsVal;
+    if (useStructured && parsed) {
+      title = [parsed.who, parsed.what].filter(Boolean).join('：').slice(0, 40) || raw.slice(0, 30);
+      categoryVal = parsed.type || 'general';
+      contentVal = buildCaptureContent(parsed);
+      tagsVal = ['capture', 'raw_log', parsed.type || ''];
+    } else {
+      title = raw.slice(0, 40);
+      categoryVal = 'general';
+      contentVal = `【Capture Raw】\n\n${raw}`;
+      tagsVal = ['capture', 'raw_log'];
+    }
     await sb.from('knowledge_items').insert({
-      user_id: user.id, title, category: type,
-      content: buildContent(),
-      tags: [cfg.label, 'quicklog'],
-      source_ref: 'Nexus QuickLog',
+      user_id: user.id, title, category: categoryVal,
+      content: contentVal, tags: tagsVal, source_ref: 'Nexus Capture',
     });
     setSaving(false); setSaved(true);
-    setFields({});
+    setRaw(''); setPrompt(''); setReply(''); setParsed(null); setStep(1);
   };
 
   return (
     <>
-      <PageHeader title="Capture" subtitle="30秒で保存。なぜを残す。" onBack={back}/>
-      <p className="mb-4 rounded-lg bg-slate-50 border border-slate-100 p-3 text-xs text-slate-500">
-        「なぜ」だけ書けばいい。内容は後から補える。判断理由は今しか書けない。
-      </p>
+      <PageHeader title="Capture" subtitle="話す→AIが構造化→保存" onBack={back}/>
 
-      {/* タイプ選択 */}
-      <div className="mb-5 grid grid-cols-2 gap-2">
-        {Object.entries(LOG_TYPES).map(([k, v]) => (
-          <button key={k} onClick={() => { setType(k); setFields({}); setSaved(false); }}
-            className={cn('rounded-xl border py-3 text-sm font-medium transition-colors',
-              type === k ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-200 bg-white text-slate-600')}>
-            {v.icon} {v.label}
-          </button>
-        ))}
+      {/* STEP 1: 入力 */}
+      <div className="mb-4">
+        <label className="mb-2 block text-sm font-semibold text-slate-700">
+          🎤 自由に入力する
+        </label>
+        <p className="mb-2 text-xs text-slate-400">
+          何があったかを30秒で書くだけ。構造化はAIが担当する。
+        </p>
+        <textarea
+          value={raw}
+          onChange={e => { setRaw(e.target.value); setStep(1); setSaved(false); }}
+          rows={6}
+          placeholder={`例：\n黒田くん\n再現性教育を実施した\n成功体験はあるが再現できていないため\n次回は応用編へ進む`}
+          className="w-full rounded-xl border-2 border-indigo-200 bg-white p-4 text-sm leading-relaxed text-slate-800 placeholder:text-slate-300 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+        />
       </div>
 
-      {/* 入力フォーム */}
-      <div className="space-y-3">
-        {cfg.fields.map(f => {
-          const isWhy = f.key === 'why' || f.key === 'risk';
-          return (
-            <div key={f.key}>
-              <label className={cn('mb-1 block text-sm font-medium', isWhy ? 'text-indigo-600' : 'text-slate-700')}>
-                {isWhy && <span className="mr-1">★</span>}{f.label}
-              </label>
-              <textarea value={fields[f.key] || ''} onChange={upd(f.key)} rows={2}
-                placeholder={f.placeholder}
-                className={cn('w-full rounded-xl border p-3 text-sm leading-relaxed text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2',
-                  isWhy
-                    ? 'border-indigo-200 bg-indigo-50 focus:border-indigo-400 focus:ring-indigo-100'
-                    : 'border-slate-200 bg-white focus:border-indigo-400 focus:ring-indigo-100')}/>
+      {/* アクション */}
+      {raw.trim() && step === 1 && (
+        <div className="mb-4 flex gap-2">
+          <Btn className="flex-1" onClick={generate}>
+            <WandIcon size={14}/> AIで構造化する
+          </Btn>
+          <Btn variant="secondary" onClick={() => save(false)} disabled={saving}>
+            そのまま保存
+          </Btn>
+        </div>
+      )}
+
+      {/* STEP 2: Bridge */}
+      {step >= 2 && prompt && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+          <div className="text-xs font-semibold text-slate-500">① Claudeに渡すプロンプト</div>
+          <textarea readOnly value={prompt} rows={6}
+            className="w-full rounded-lg border border-slate-100 bg-slate-50 p-3 font-mono text-xs leading-relaxed"/>
+          <div className="flex justify-end">
+            <Btn variant="secondary" size="sm" onClick={copy}>
+              {copied ? <><CheckIcon size={14}/> コピー済み</> : <><CopyIcon size={14}/> Claudeにコピー</>}
+            </Btn>
+          </div>
+          <div className="text-xs font-semibold text-slate-500">② Claudeの回答（JSON）を貼り付け</div>
+          <textarea value={reply} onChange={e => { setReply(e.target.value); setParsed(null); setParseErr(''); }}
+            rows={4} placeholder='{ "type": "education", "who": "黒田くん", ... }'
+            className="w-full rounded-lg border border-slate-200 bg-white p-3 font-mono text-xs leading-relaxed"/>
+          {parseErr && <ErrState error={parseErr}/>}
+          <Btn variant="outline" size="sm" onClick={doParse} disabled={!reply.trim()}>
+            構造を確認する
+          </Btn>
+        </div>
+      )}
+
+      {/* STEP 3: Preview + Save */}
+      {step === 3 && parsed && (
+        <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 space-y-3">
+          <div className="text-xs font-semibold text-indigo-600">
+            {CAPTURE_TYPE_LABELS[parsed.type] || parsed.type} として保存します
+          </div>
+          {[
+            { label: '誰に', value: parsed.who },
+            { label: '何をした', value: parsed.what },
+            { label: '★なぜ', value: parsed.why, highlight: true },
+            { label: 'リスク', value: parsed.risk },
+            { label: '期待効果', value: parsed.effect },
+            { label: '次どうする', value: parsed.next },
+          ].filter(r => r.value).map(r => (
+            <div key={r.label}>
+              <div className={cn('text-xs font-medium', r.highlight ? 'text-indigo-600' : 'text-slate-400')}>{r.label}</div>
+              <div className="text-sm text-slate-800">{r.value}</div>
             </div>
-          );
-        })}
-      </div>
+          ))}
+          {saved && <span className="block text-sm text-emerald-600">保存しました ✓</span>}
+          <Btn className="w-full" onClick={() => save(true)} disabled={saving}>
+            <SaveIcon size={14}/> {saving ? '保存中…' : 'Raw Logsに保存'}
+          </Btn>
+        </div>
+      )}
 
-      <div className="mt-5 flex items-center justify-between">
-        {saved && <span className="text-sm text-emerald-600">保存しました ✓</span>}
-        {!saved && <span/>}
-        <Btn onClick={save} disabled={saving}>
-          <SaveIcon size={14}/> {saving ? '保存中…' : 'ナレッジに保存'}
-        </Btn>
-      </div>
+      {saved && step === 1 && (
+        <p className="text-center text-sm text-emerald-600 py-4">保存しました ✓</p>
+      )}
     </>
   );
 }
@@ -3662,7 +3730,8 @@ function App() {
       case 'kwDetail':  return <KnowledgeDetailScreen id={id}/>;
       case 'schedule':  return <ScheduleScreen/>;
       case 'kpi':            return <KpiScreen/>;
-      case 'quicklog':       return <QuickLogScreen/>;
+      case 'quicklog':       return <CaptureScreen/>;
+      case 'capture':        return <CaptureScreen/>;
       case 'staff':          return <StaffScreen/>;
       case 'staffDetail':    return <StaffDetailScreen id={id}/>;
       case 'settings':       return <SettingsScreen/>;
