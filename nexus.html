@@ -3397,8 +3397,8 @@ function StaffDetailScreen({ id }) {
                 const why = getField(log.content, 'なぜ');
                 const next = getField(log.content, '次どうする');
                 const risk = getField(log.content, 'リスク');
-                const related = log.content?.includes('■ 関連資料') ?
-                  log.content.split('■ 関連資料')[1]?.replace(/^[\s─]+/,'').trim() : null;
+                const relParts = log.content && log.content.includes('■ 関連資料') ? log.content.split('■ 関連資料') : null;
+                const related = relParts ? (relParts[1]||'').replace(/^\s+/,'').trim() || null : null;
                 return (
                   <LogAccordion key={log.id}
                     date={log.created_at?.slice(0,10)}
@@ -3730,6 +3730,15 @@ function CaptureExport({ onClose }) {
     setItems(data||[]);
     setLoading(false);
   };
+  const loadAll = async () => {
+    setLoading(true);
+    const { data } = await sb.from('knowledge_items')
+      .select('*').eq('user_id', user.id)
+      .contains('tags', ['capture'])
+      .order('created_at', { ascending: false });
+    setItems(data||[]);
+    setLoading(false);
+  };
   useEffect(()=>{ load(days); },[days]);
 
   const staffById = useMemo(()=>{
@@ -3743,9 +3752,10 @@ function CaptureExport({ onClose }) {
     const records = items.map(item => {
       const p = parseCapture(item);
       // 関連資料を抽出
-      const related = item.content?.includes('■ 関連資料')
-        ? item.content.split('■ 関連資料')[1]?.replace(/^[\s─]+/,'').trim() || ''
+      const relatedRaw = item.content && item.content.includes('■ 関連資料')
+        ? item.content.split('■ 関連資料')[1] || ''
         : '';
+      const related = relatedRaw.replace(/^\s+/,'').trim();
       return {
         id: item.id,
         date: p.date,          // ← チャッピーにここを修正してもらう
@@ -3760,20 +3770,21 @@ function CaptureExport({ onClose }) {
     return records;
   }, [items, staffById]);
 
-  // チャッピーへ渡すプロンプト付きテキスト
-  const chatgptPrompt = `以下はNexusのCaptureログです。
-各レコードの「related_doc」に記録された内容から実施日を読み取り、
-「date」フィールドをYYYY-MM-DD形式で修正してください。
+  // チャッピーへ渡すプロンプト付きテキスト（文字列結合で複数行テンプレート回避）
+  const instruction = [
+    '以下はNexusのCaptureログです。',
+    '各レコードのrelated_docに記録された内容から実施日を読み取り、',
+    'dateフィールドをYYYY-MM-DD形式で修正してください。',
+    '',
+    'ルール：',
+    '- related_docに日付がある場合はその日付をdateに設定する',
+    '- related_docに日付がない場合はdateはそのままにする',
+    '- 出力はJSONのみ（説明文不要）',
+    '- idフィールドは必ず保持する',
+    '',
+  ].join('\n');
 
-ルール：
-- related_docに日付が書いてある場合はその日付をdateに設定する
-- related_docに日付がない場合はdateはそのままにする
-- 出力はJSONのみ（説明文不要）
-- idフィールドは必ず保持する
-
-${JSON.stringify(fullJson, null, 2)}`;
-
-  const json = chatgptPrompt;
+  const json = instruction + JSON.stringify(fullJson, null, 2);
 
   const copy = async () => {
     try { await navigator.clipboard.writeText(json); setCopied(true); setTimeout(()=>setCopied(false),2000); } catch(e){}
@@ -3794,12 +3805,7 @@ ${JSON.stringify(fullJson, null, 2)}`;
             {d}日
           </button>
         ))}
-        <button onClick={async()=>{
-          setLoading(true);
-          const { data } = await sb.from('knowledge_items').select('*').eq('user_id', user.id).contains('tags', ['capture']).order('created_at',{ascending:false});
-          setItems(data||[]);
-          setLoading(false);
-        }} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-600">全件</button>
+        <button onClick={loadAll} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-600">全件</button>
       </div>
 
       {loading ? <LoadingState/> : (
