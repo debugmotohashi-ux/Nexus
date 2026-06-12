@@ -3023,7 +3023,9 @@ function StaffForm({ initial, onClose, onSaved }) {
     const { id, created_at, updated_at, ...rest } = f;
     const payload = { ...rest, user_id: user.id,
       last_education_at: f.last_education_at || null,
-      last_interview_at: f.last_interview_at || null };
+      last_interview_at: f.last_interview_at || null,
+      next_education_at: f.next_education_at || null,
+      next_interview_at: f.next_interview_at || null };
     const { error } = f.id
       ? await sb.from('staff_profiles').update(payload).eq('id', f.id).eq('user_id', user.id)
       : await sb.from('staff_profiles').insert(payload);
@@ -3051,8 +3053,20 @@ function StaffForm({ initial, onClose, onSaved }) {
         <Inp label="最終面談日" type="date" value={f.last_interview_at} onChange={upd('last_interview_at')}/>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Inp label="次回教育予定日" type="date" value={f.next_education_at||''} onChange={upd('next_education_at')}/>
-        <Inp label="次回面談予定日" type="date" value={f.next_interview_at||''} onChange={upd('next_interview_at')}/>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500">次回教育予定日</label>
+          <div className="flex gap-1">
+            <input type="date" value={f.next_education_at||''} onChange={upd('next_education_at')} className={cn(inputCls,'flex-1')}/>
+            {f.next_education_at && <button type="button" onClick={()=>setF(v=>({...v,next_education_at:''}))} className="rounded-lg border border-slate-200 px-2 text-slate-400 hover:text-rose-500">×</button>}
+          </div>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500">次回面談予定日</label>
+          <div className="flex gap-1">
+            <input type="date" value={f.next_interview_at||''} onChange={upd('next_interview_at')} className={cn(inputCls,'flex-1')}/>
+            {f.next_interview_at && <button type="button" onClick={()=>setF(v=>({...v,next_interview_at:''}))} className="rounded-lg border border-slate-200 px-2 text-slate-400 hover:text-rose-500">×</button>}
+          </div>
+        </div>
       </div>
       <Txta label="メモ" rows={2} value={f.notes} onChange={upd('notes')}/>
       <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -3373,8 +3387,8 @@ function StaffScreen() {
       {(staffAlerts.edScheduled.length > 0 || staffAlerts.ivScheduled.length > 0) && (
         <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-1.5">
           <div className="text-xs font-bold text-amber-700">📅 フォロー必要（予定あり）</div>
-          {staffAlerts.edScheduled.map(s=><div key={s.id} className="text-xs text-amber-600">📚 {s.name}：{s.next_education_at}</div>)}
-          {staffAlerts.ivScheduled.map(s=><div key={s.id} className="text-xs text-amber-600">💬 {s.name}：{s.next_interview_at}</div>)}
+          {staffAlerts.edScheduled.length>0&&<div className="text-xs text-amber-600">📚 教育：{staffAlerts.edScheduled.map(s=>s.name).join('・')}</div>}
+          {staffAlerts.ivScheduled.length>0&&<div className="text-xs text-amber-600">💬 面談：{staffAlerts.ivScheduled.map(s=>s.name).join('・')}</div>}
         </div>
       )}
 
@@ -3879,10 +3893,7 @@ function CalendarScreen() {
 
   const events = useMemo(()=>{
     const evs = [];
-    (store.staff||[]).filter(s=>s.is_active).forEach(s => {
-      if (s.next_education_at) evs.push({ date:s.next_education_at, label:`📚 ${s.name} 教育`, type:'education', source:'staff', readonly:true });
-      if (s.next_interview_at) evs.push({ date:s.next_interview_at, label:`💬 ${s.name} 面談`, type:'interview', source:'staff', readonly:true });
-    });
+    // staff next_*_at は表示しない（スケジュールがstaff側に同期する一方向のみ）
     (store.schedules||[]).forEach(s => {
       if (s.scheduled_date) {
         const cat = s.category;
@@ -4240,7 +4251,11 @@ function ScheduleImport({ onClose, onSaved }) {
       status: 'todo',
       notes: d.notes || '',
     }));
-    await sb.from('schedules').insert(rows);
+    // 既存レコードと照合して重複を除外
+    const { data: existing } = await sb.from('schedules').select('title,scheduled_date').eq('user_id', user.id);
+    const existKeys = new Set((existing||[]).map(e => `${e.title}|${e.scheduled_date}`));
+    const deduped = rows.filter(r => !existKeys.has(`${r.title}|${r.scheduled_date}`));
+    if (deduped.length > 0) await sb.from('schedules').insert(deduped);
 
     // スタッフの次回日程を自動同期（教育/面談・最も近い未来の日付）
     const { data: staffList } = await sb.from('staff_profiles').select('id,name').eq('user_id', user.id);
