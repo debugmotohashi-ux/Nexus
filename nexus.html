@@ -3198,19 +3198,16 @@ function StaffDetailScreen({ id }) {
             <div className="space-y-3">
               {logs.map(log => {
                 // contentから「なぜ」を抽出して強調表示
-                const whyMatch = log.content?.match(/■ なぜ[^
-]*
-([^
-■]+)/);
-                const why = whyMatch ? whyMatch[1].trim() : null;
-                const whatLabel = tab==='education'?'何をした':'何を話した';
-                const whatMatch = log.content?.match(new RegExp(`■ ${whatLabel}[^\n]*\n([^\n■]+)`));
-                const what = whatMatch ? whatMatch[1].trim() : null;
-                const nextMatch = log.content?.match(/■ 次どうする[^
-]*
-([^
-■]+)/);
-                const next = nextMatch ? nextMatch[1].trim() : null;
+                const getField = (c, label) => {
+                  const lines = (c||'').split('\n');
+                  for(let i=0;i<lines.length;i++){
+                    if(lines[i].includes('■ '+label)){ return (lines[i+1]||'').trim(); }
+                  }
+                  return null;
+                };
+                const what = getField(log.content, tab==='education'?'何をした':'何を話した');
+                const why = getField(log.content, 'なぜ');
+                const next = getField(log.content, '次どうする');
                 return (
                   <div key={log.id} className="rounded-xl border border-slate-200 bg-white p-4">
                     <div className="mb-2 flex items-center justify-between">
@@ -3651,6 +3648,7 @@ function CaptureScreen() {
   const [showExport, setShowExport] = useState(false);
   const [actualDate, setActualDate] = useState(() => localIso());
   const [isUrgent, setIsUrgent] = useState(false);
+  const [linkedStaffId, setLinkedStaffId] = useState(null);
 
   const generate = () => {
     if (!raw.trim()) return;
@@ -3715,7 +3713,7 @@ function CaptureScreen() {
     fetchTable('knowledge'); fetchTable('staff');
     setSaving(false); setSaved(true);
     setRaw(''); setPrompt(''); setReply(''); setParsed(null); setStep(1); setRelatedDoc('');
-    setActualDate(localIso()); setIsUrgent(false);
+    setActualDate(localIso()); setIsUrgent(false); setLinkedStaffId(null);
   };
 
   return (
