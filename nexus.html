@@ -556,7 +556,6 @@ function HomeScreen() {
   const { sb, user, nav } = useApp();
   const [skills, setSkills] = useState([]);
   const [staffFollow, setStaffFollow] = useState({ edNoSched:[], edScheduled:[], ivNoSched:[], ivScheduled:[], weekEvents:[] });
-  const [kpiStats, setKpiStats] = useState({ captures: 0, knowledge: 0, skillCount: 0 });
   const [loading, setLoading] = useState(true);
   const [showSmartRun, setShowSmartRun] = useState(false);
 
@@ -564,14 +563,6 @@ function HomeScreen() {
     const load = async () => {
       const { data: sk } = await sb.from('skills').select('*').eq('user_id', user.id);
       setSkills(sk || []);
-      // KPI簡易集計
-      const now = new Date();
-      const mStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-      const { count: capCount } = await sb.from('knowledge_items').select('id', {count:'exact',head:true})
-        .eq('user_id', user.id).contains('tags', ['capture']).gte('created_at', mStart+'-01');
-      const { count: kwCount } = await sb.from('knowledge_items').select('id', {count:'exact',head:true})
-        .eq('user_id', user.id);
-      setKpiStats({ captures: capCount||0, knowledge: kwCount||0, skillCount: (sk||[]).length });
       // スタッフのフォロー漏れ（教育14日以上）— テーブルが無くてもエラーにしない
       try {
         const { data: st } = await sb.from('staff_profiles').select('name,last_education_at,last_interview_at,next_education_at,next_interview_at,is_active').eq('user_id', user.id);
@@ -608,8 +599,7 @@ function HomeScreen() {
   const ACTIONS = [
     { key:'capture',  icon:'🎤', title:'Capture',   desc:'30秒で保存する',       screen:'capture',  tone:'indigo' },
     { key:'smartrun', icon:'⚡', title:'Smart Run',  desc:'今やるべきことを確認', action:()=>setShowSmartRun(true), tone:'amber' },
-    { key:'staff',    icon:'👥', title:'スタッフ',   desc:'人物DB・教育フォロー', screen:'staff',    tone:'emerald' },
-    { key:'knowledge',icon:'📚', title:'ナレッジ',   desc:'蓄積した知識を見る',   screen:'knowledge',tone:'slate' },
+    { key:'calendar', icon:'🗓', title:'カレンダー', desc:'予定・スケジュール',    screen:'calendar', tone:'slate' },
     { key:'skills',   icon:'⭐', title:'Skill',       desc:'再利用テンプレート',   screen:'skills',   tone:'indigo' },
   ];
   const toneCls = {
@@ -650,21 +640,6 @@ function HomeScreen() {
           ))}
         </button>
       )}
-
-      {/* KPIサマリ */}
-      <div className="mb-4 grid grid-cols-3 gap-2">
-        {[
-          { label:'今月のCapture', value: kpiStats.captures, unit:'件', screen:'knowledge' },
-          { label:'ナレッジ総数',  value: kpiStats.knowledge, unit:'件', screen:'knowledge' },
-          { label:'Skill数',      value: kpiStats.skillCount, unit:'件', screen:'skills' },
-        ].map(k => (
-          <button key={k.label} onClick={()=>nav(k.screen)}
-            className="rounded-xl border border-slate-200 bg-white p-3 text-center hover:border-slate-300 transition-colors">
-            <div className="font-mono text-xl font-bold text-indigo-600">{k.value}</div>
-            <div className="mt-0.5 text-[10px] text-slate-400 leading-tight">{k.label}</div>
-          </button>
-        ))}
-      </div>
 
       {/* アクションランチャー */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -3167,8 +3142,8 @@ function normalizeStaff(d, userId) {
     goals: arr(d.goals),
     current_situation: d.current_situation || d.current_status || '',
     notes: d.notes || '',
-    last_education_at: d.last_education_at || d.last_education || null,
-    last_interview_at: d.last_interview_at || d.last_interview || null,
+    last_education_at: d.last_education_at || d.last_education || d.実施日_教育 || null,
+    last_interview_at: d.last_interview_at || d.last_interview || d.実施日_面談 || null,
     next_education_at: d.next_education_at || null,
     next_interview_at: d.next_interview_at || null,
     is_active: d.is_active !== false,
@@ -3444,6 +3419,8 @@ function CaptureScreen() {
   const [saved, setSaved] = useState(false);
   const [step, setStep] = useState(1); // 1:input 2:bridge 3:preview
   const [relatedDoc, setRelatedDoc] = useState('');
+  const [actualDate, setActualDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [isUrgent, setIsUrgent] = useState(false);
 
   const generate = () => {
     if (!raw.trim()) return;
@@ -3476,32 +3453,32 @@ function CaptureScreen() {
       title = [parsed.who, parsed.what].filter(Boolean).join('：').slice(0, 40) || raw.slice(0, 30);
       categoryVal = parsed.type || 'general';
       contentVal = buildCaptureContent(parsed) + (relatedDoc.trim() ? `\n\n─────────────────\n■ 関連資料\n${relatedDoc.trim()}` : '');
-      tagsVal = ['capture', 'raw_log', parsed.type || ''];
+      tagsVal = ['capture', 'raw_log', parsed.type || '', ...(isUrgent?['urgent']:[])];
     } else {
       title = raw.slice(0, 40);
       categoryVal = 'general';
       contentVal = `【Capture Raw】\n\n${raw}` + (relatedDoc.trim() ? `\n\n─────────────────\n■ 関連資料\n${relatedDoc.trim()}` : '');
-      tagsVal = ['capture', 'raw_log'];
+      tagsVal = ['capture', 'raw_log', ...(isUrgent?['urgent']:[])];
     }
     await sb.from('knowledge_items').insert({
       user_id: user.id, title, category: categoryVal,
       content: contentVal, tags: tagsVal, source_ref: 'Nexus Capture',
     });
-    // 誰に・誰とが一致するスタッフの日付を自動更新
+    // 誰に・誰とが一致するスタッフの日付を自動更新（緊急の場合はスキップ）
     const whoVal = useStructured && parsed ? (parsed.who || '') : '';
-    if (whoVal.trim()) {
-      const today = new Date().toISOString().split('T')[0];
+    if (whoVal.trim() && !isUrgent) {
       const field = (categoryVal === 'education') ? 'last_education_at' : categoryVal === 'interview' ? 'last_interview_at' : null;
       if (field) {
         const { data: matched } = await sb.from('staff_profiles').select('id,name').eq('user_id', user.id);
         if (matched) {
           const hit = matched.find(s => whoVal.includes(s.name) || s.name.includes(whoVal.trim()));
-          if (hit) await sb.from('staff_profiles').update({ [field]: today }).eq('id', hit.id).eq('user_id', user.id);
+          if (hit) await sb.from('staff_profiles').update({ [field]: actualDate }).eq('id', hit.id).eq('user_id', user.id);
         }
       }
     }
     setSaving(false); setSaved(true);
     setRaw(''); setPrompt(''); setReply(''); setParsed(null); setStep(1); setRelatedDoc('');
+    setActualDate(new Date().toISOString().split('T')[0]); setIsUrgent(false);
   };
 
   return (
@@ -3593,6 +3570,22 @@ function CaptureScreen() {
               <div className="text-sm text-slate-800">{r.value}</div>
             </div>
           ))}
+          {/* 実施日・緊急フラグ */}
+          {(parsed.type === 'education' || parsed.type === 'interview') && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-medium text-slate-600 shrink-0">実施日</label>
+                <input type="date" value={actualDate} onChange={e=>setActualDate(e.target.value)}
+                  className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"/>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                <input type="checkbox" checked={isUrgent} onChange={e=>setIsUrgent(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-rose-500"/>
+                <span>緊急対応（定期フォローの日程を変えない）</span>
+              </label>
+              {isUrgent && <p className="text-xs text-rose-500">⚠️ 記録は保存されますが、フォロー間隔は更新されません</p>}
+            </div>
+          )}
           {relatedDoc.trim() && (
             <div>
               <div className="text-xs font-medium text-slate-400">関連資料</div>
