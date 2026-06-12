@@ -615,11 +615,18 @@ function HomeScreen() {
           {staffFollow.ivScheduled.map(s=><div key={s.name} className="text-xs text-amber-600">💬 {s.name}：{s.next_interview_at}</div>)}
         </button>
       )}
-      {staffFollow.weekEvents.length > 0 && (() => {
+      {(() => {
         const now = new Date(); now.setHours(0,0,0,0);
         const end = new Date(now); end.setDate(now.getDate()+4);
         const fmt = (d) => `${d.getMonth()+1}/${d.getDate()}`;
         const rangeLabel = `${fmt(now)}〜${fmt(end)}`;
+        // 今日〜4日後の5日分のスロットを生成
+        const slots = Array.from({length:5},(_,i)=>{
+          const d = new Date(now); d.setDate(now.getDate()+i);
+          const iso = d.toISOString().split('T')[0];
+          const evs = staffFollow.weekEvents.filter(e=>e.date===iso);
+          return { iso, d, i, evs };
+        });
         return (
           <div className="mb-3">
             <div className="mb-2 flex items-center justify-between">
@@ -627,21 +634,30 @@ function HomeScreen() {
               <button onClick={()=>nav('calendar')} className="text-xs text-indigo-500">{rangeLabel} →</button>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1" style={{scrollbarWidth:'none'}}>
-              {staffFollow.weekEvents.map((e,i)=>{
-                const dayLabel = e.daysUntil===0?'今日':e.daysUntil===1?'明日':`${new Date(e.date+'T12:00:00').getMonth()+1}/${new Date(e.date+'T12:00:00').getDate()}`;
-                const toneCard = e.type==='education'?'border-indigo-200 bg-indigo-50':
-                  e.type==='interview'?'border-emerald-200 bg-emerald-50':
-                  e.daysUntil===0?'border-amber-200 bg-amber-50':'border-slate-200 bg-white';
-                const toneText = e.type==='education'?'text-indigo-700':
-                  e.type==='interview'?'text-emerald-700':
-                  e.daysUntil===0?'text-amber-700':'text-slate-700';
-                const icon = e.type==='education'?'📚':e.type==='interview'?'💬':'✅';
+              {slots.map(({iso, d, i, evs})=>{
+                const dayLabel = i===0?'今日':i===1?'明日':`${d.getMonth()+1}/${d.getDate()}`;
+                const DOW = ['日','月','火','水','木','金','土'][d.getDay()];
+                const hasEv = evs.length > 0;
+                const firstEv = evs[0];
+                const toneCard = !hasEv?'border-slate-100 bg-slate-50':
+                  firstEv.type==='education'?'border-indigo-200 bg-indigo-50':
+                  firstEv.type==='interview'?'border-emerald-200 bg-emerald-50':
+                  i===0?'border-amber-200 bg-amber-50':'border-slate-200 bg-white';
+                const toneHead = !hasEv?'text-slate-300':
+                  i===0?'text-amber-600':'text-slate-600';
                 return (
-                  <button key={i} onClick={()=>nav('calendar')}
-                    className={cn('shrink-0 rounded-xl border p-3 text-left w-28', toneCard)}>
-                    <div className={cn('text-xs font-bold mb-1', toneText)}>{dayLabel}</div>
-                    <div className="text-xs text-slate-700 leading-snug line-clamp-2">{icon} {e.title}</div>
-                    {e.assignee && <div className="mt-1 text-[10px] text-slate-400 truncate">担:{e.assignee}</div>}
+                  <button key={iso} onClick={()=>nav('calendar')}
+                    className={cn('shrink-0 rounded-xl border p-3 text-left transition-colors', toneCard, 'w-[88px]')}>
+                    <div className={cn('text-xs font-bold', toneHead)}>{dayLabel}</div>
+                    <div className="text-[10px] text-slate-400 mb-1">{DOW}曜</div>
+                    {!hasEv
+                      ? <div className="text-[10px] text-slate-300">予定なし</div>
+                      : evs.slice(0,2).map((e,j)=>{
+                          const icon = e.type==='education'?'📚':e.type==='interview'?'💬':'✅';
+                          return <div key={j} className="text-[10px] text-slate-700 leading-tight line-clamp-2">{icon} {e.title}</div>;
+                        })
+                    }
+                    {evs.length > 2 && <div className="text-[10px] text-slate-400 mt-0.5">+{evs.length-2}件</div>}
                   </button>
                 );
               })}
@@ -3770,7 +3786,7 @@ function MonthlyReviewBridge({ opps, skills }) {
 function CalendarScreen() {
   const { sb, user, store, storeLoaded, fetchTable } = useApp();
   const loading = !storeLoaded;
-  const [view, setView] = useState('month');
+  const [view, setView] = useState('week');
   const [weekOffset, setWeekOffset] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
   const [addDate, setAddDate] = useState(null);   // 追加モーダル用
@@ -3817,12 +3833,13 @@ function CalendarScreen() {
 
   // Week
   const getWeekDays = (offset) => {
-    const mon = new Date(today);
-    mon.setDate(today.getDate()-(today.getDay()===0?6:today.getDay()-1)+offset*7);
-    return Array.from({length:7},(_,i)=>{ const d=new Date(mon); d.setDate(mon.getDate()+i); return d; });
+    const start = new Date(today);
+    start.setDate(today.getDate() + offset*7);
+    return Array.from({length:7},(_,i)=>{ const d=new Date(start); d.setDate(start.getDate()+i); return d; });
   };
   const weekDays = useMemo(()=>getWeekDays(weekOffset),[weekOffset]);
-  const weekLabel = weekOffset===0?'今週':weekOffset===-1?'先週':weekOffset===1?'来週':weekOffset<0?`${Math.abs(weekOffset)}週前`:`${weekOffset}週後`;
+  const weekLabel = weekOffset===0?'今日から7日間':weekOffset===-1?'先週':weekOffset===1?'来週以降':
+    weekOffset<0?`${Math.abs(weekOffset)*7}日前から`:`${weekOffset*7}日後から`;
 
   // Month — all days
   const monthInfo = useMemo(()=>{
