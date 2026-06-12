@@ -648,8 +648,8 @@ function HomeScreen() {
                 const hasEv = evs.length > 0;
                 return (
                   <button key={iso} onClick={()=>nav('calendar')}
-                    className="shrink-0 rounded-xl border border-slate-200 bg-white p-3 text-left transition-colors hover:border-slate-300 w-[88px]">
-                    <div className={cn('text-xs font-bold mb-1.5', i===0?'text-amber-600':i===1?'text-indigo-600':'text-slate-500')}>
+                    className="shrink-0 rounded-xl border border-slate-200 bg-white p-2.5 text-left transition-colors hover:border-slate-300 w-[88px] min-h-[96px] flex flex-col">
+                    <div className={cn('text-xs font-bold mb-1.5 w-full', i===0?'text-amber-600':i===1?'text-indigo-600':'text-slate-500')}>
                       {dayLabel}
                     </div>
                     {!hasEv
@@ -3080,17 +3080,30 @@ function StaffForm({ initial, onClose, onSaved }) {
 }
 
 function StaffDetailScreen({ id }) {
-  const { sb, user, back, fetchTable } = useApp();
+  const { sb, user, back, fetchTable, store } = useApp();
   const [st, setSt] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
   const [marking, setMarking] = useState('');
+  const [tab, setTab] = useState('profile'); // profile | education | interview
+  const [logs, setLogs] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(false);
 
   const load = async () => {
     const { data } = await sb.from('staff_profiles').select('*').eq('id', id).eq('user_id', user.id).single();
     setSt(data); setLoading(false);
   };
   useEffect(() => { load(); }, [id]);
+
+  // 記録タブに切り替えたときにログを取得
+  useEffect(() => {
+    if (tab === 'profile') return;
+    setLogsLoading(true);
+    const cat = tab === 'education' ? 'education' : 'interview';
+    sb.from('knowledge_items').select('*').eq('user_id', user.id).eq('staff_id', id).eq('category', cat)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => { setLogs(data||[]); setLogsLoading(false); });
+  }, [tab, id]);
 
   const today = () => localIso();
   const mark = async (field) => {
@@ -3128,13 +3141,13 @@ function StaffDetailScreen({ id }) {
           <Btn variant="danger" size="sm" onClick={del}><TrashIcon size={14}/></Btn>
         </div>}/>
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-3 flex flex-wrap gap-2">
         {gapBadge('教育', st.last_education_at, 14)}
         {gapBadge('面談', st.last_interview_at, 30)}
         {!st.is_active && <Badge tone="slate">非現役</Badge>}
       </div>
 
-      <div className="mb-5 grid grid-cols-2 gap-2">
+      <div className="mb-4 grid grid-cols-2 gap-2">
         <Btn variant="outline" size="sm" disabled={marking==='last_education_at'} onClick={()=>mark('last_education_at')}>
           <CheckIcon size={14}/> 今日教育した
         </Btn>
@@ -3143,20 +3156,80 @@ function StaffDetailScreen({ id }) {
         </Btn>
       </div>
 
-      {rows.length === 0
-        ? <EmptyState message="詳細情報が未登録です" action={<Btn size="sm" variant="secondary" onClick={()=>setShowEdit(true)}>情報を追加</Btn>}/>
-        : (
-          <div className="space-y-3">
-            {rows.map(r => (
-              <div key={r.label} className={cn('rounded-xl border bg-white p-4',
-                r.tone==='emerald' ? 'border-emerald-200' : r.tone==='rose' ? 'border-rose-200' : 'border-slate-200')}>
-                <div className={cn('mb-1 text-xs font-medium',
-                  r.tone==='emerald' ? 'text-emerald-600' : r.tone==='rose' ? 'text-rose-500' : 'text-slate-400')}>{r.label}</div>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{r.value}</p>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* タブ */}
+      <div className="mb-4 flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
+        {[
+          { k:'profile',   l:'プロフィール' },
+          { k:'education', l:'📚 教育記録' },
+          { k:'interview', l:'💬 面談記録' },
+        ].map(({k,l})=>(
+          <button key={k} onClick={()=>setTab(k)}
+            className={cn('flex-1 rounded-lg py-2 text-xs font-medium transition-colors',
+              tab===k?'bg-white text-indigo-700 shadow-sm':'text-slate-500')}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* プロフィール */}
+      {tab==='profile' && (
+        rows.length === 0
+          ? <EmptyState message="詳細情報が未登録です" action={<Btn size="sm" variant="secondary" onClick={()=>setShowEdit(true)}>情報を追加</Btn>}/>
+          : (
+            <div className="space-y-3">
+              {rows.map(r => (
+                <div key={r.label} className={cn('rounded-xl border bg-white p-4',
+                  r.tone==='emerald'?'border-emerald-200':r.tone==='rose'?'border-rose-200':'border-slate-200')}>
+                  <div className={cn('mb-1 text-xs font-medium',
+                    r.tone==='emerald'?'text-emerald-600':r.tone==='rose'?'text-rose-500':'text-slate-400')}>{r.label}</div>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{r.value}</p>
+                </div>
+              ))}
+            </div>
+          )
+      )}
+
+      {/* 教育記録 / 面談記録 */}
+      {(tab==='education' || tab==='interview') && (
+        logsLoading ? <LoadingState/> :
+        logs.length === 0
+          ? <EmptyState message="記録がありません" action={<p className="text-xs text-slate-400 mt-1">Captureから記録を追加してください</p>}/>
+          : (
+            <div className="space-y-3">
+              {logs.map(log => {
+                // contentから「なぜ」を抽出して強調表示
+                const whyMatch = log.content?.match(/■ なぜ[^
+]*
+([^
+■]+)/);
+                const why = whyMatch ? whyMatch[1].trim() : null;
+                const whatLabel = tab==='education'?'何をした':'何を話した';
+                const whatMatch = log.content?.match(new RegExp(`■ ${whatLabel}[^\n]*\n([^\n■]+)`));
+                const what = whatMatch ? whatMatch[1].trim() : null;
+                const nextMatch = log.content?.match(/■ 次どうする[^
+]*
+([^
+■]+)/);
+                const next = nextMatch ? nextMatch[1].trim() : null;
+                return (
+                  <div key={log.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-xs font-mono text-slate-400">{log.created_at?.slice(0,10)}</span>
+                      {log.tags?.includes('urgent') && <Badge tone="rose">緊急</Badge>}
+                    </div>
+                    {what && <div className="mb-1 text-sm text-slate-700">{what}</div>}
+                    {why && (
+                      <div className="mb-1 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
+                        <span className="font-medium">なぜ：</span>{why}
+                      </div>
+                    )}
+                    {next && <div className="text-xs text-slate-500">→ {next}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          )
+      )}
 
       {showEdit && <StaffForm initial={st} onClose={()=>setShowEdit(false)} onSaved={()=>{setShowEdit(false);load();fetchTable('staff');}}/>}
     </>
@@ -3564,7 +3637,7 @@ function buildCaptureContent(p) {
 }
 
 function CaptureScreen() {
-  const { sb, user, back, fetchTable } = useApp();
+  const { sb, user, back, fetchTable, store } = useApp();
   const [raw, setRaw] = useState('');
   const [prompt, setPrompt] = useState('');
   const [reply, setReply] = useState('');
@@ -3598,6 +3671,11 @@ function CaptureScreen() {
       if (!obj || !obj.type) { setParseErr('typeが見つかりません。JSONのみ貼り付けてください。'); return; }
       setParsed(obj);
       setStep(3);
+      // 「誰に」フィールドからスタッフを自動マッチ
+      if (obj.who && store?.staff) {
+        const hit = store.staff.find(s => obj.who.includes(s.name) || s.name.includes(obj.who.trim()));
+        setLinkedStaffId(hit ? hit.id : null);
+      }
     } catch(e) {
       setParseErr('JSONとして読み取れませんでした。Claudeの回答のJSON部分だけを貼り付けてください。');
     }
@@ -3620,6 +3698,7 @@ function CaptureScreen() {
     await sb.from('knowledge_items').insert({
       user_id: user.id, title, category: categoryVal,
       content: contentVal, tags: tagsVal, source_ref: 'Nexus Capture',
+      staff_id: linkedStaffId || null,
     });
     // 誰に・誰とが一致するスタッフの日付を自動更新（緊急の場合はスキップ）
     const whoVal = useStructured && parsed ? (parsed.who || '') : '';
@@ -3735,7 +3814,7 @@ function CaptureScreen() {
               <div className="text-sm text-slate-800">{r.value}</div>
             </div>
           ))}
-          {/* 実施日・緊急フラグ */}
+          {/* 実施日・緊急フラグ・スタッフ紐づけ */}
           {(parsed.type === 'education' || parsed.type === 'interview') && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
               <div className="flex items-center gap-3">
@@ -3743,6 +3822,17 @@ function CaptureScreen() {
                 <input type="date" value={actualDate} onChange={e=>setActualDate(e.target.value)}
                   className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"/>
               </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-slate-600 shrink-0">スタッフ紐づけ</label>
+                <select value={linkedStaffId||''} onChange={e=>setLinkedStaffId(e.target.value||null)}
+                  className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none">
+                  <option value="">紐づけなし</option>
+                  {(store?.staff||[]).filter(s=>s.is_active).map(s=>(
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              {linkedStaffId && <p className="text-xs text-indigo-500">✓ このスタッフの記録履歴に追加されます</p>}
               <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
                 <input type="checkbox" checked={isUrgent} onChange={e=>setIsUrgent(e.target.checked)}
                   className="h-4 w-4 rounded border-slate-300 text-rose-500"/>
