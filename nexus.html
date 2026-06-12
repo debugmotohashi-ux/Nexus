@@ -129,6 +129,15 @@ function fmtYenMan(n) {
   if (n >= 10000) { const m = n/10000; return (Number.isInteger(m) ? m : m.toFixed(1)) + '万円'; }
   return fmtYen(n);
 }
+// ローカル日付文字列（タイムゾーンズレ防止）
+function localIso(d) {
+  if (!d) d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
 function fmtDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -413,7 +422,7 @@ ${sk.prompt_template}` : '';
     if (selectedSkillId) {
       const sk = skills.find(s => s.id === selectedSkillId);
       if (sk) {
-        await sb.from('skills').update({ usage_count: (sk.usage_count||0)+1, last_used_at: new Date().toISOString().split('T')[0] })
+        await sb.from('skills').update({ usage_count: (sk.usage_count||0)+1, last_used_at: localIso() })
           .eq('id', selectedSkillId).eq('user_id', user.id);
       }
     }
@@ -623,7 +632,7 @@ function HomeScreen() {
         // 今日〜4日後の5日分のスロットを生成
         const slots = Array.from({length:5},(_,i)=>{
           const d = new Date(now); d.setDate(now.getDate()+i);
-          const iso = d.toISOString().split('T')[0];
+          const iso = localIso(d);
           const evs = staffFollow.weekEvents.filter(e=>e.date===iso);
           return { iso, d, i, evs };
         });
@@ -639,12 +648,9 @@ function HomeScreen() {
                 const DOW = ['日','月','火','水','木','金','土'][d.getDay()];
                 const hasEv = evs.length > 0;
                 const firstEv = evs[0];
-                const toneCard = !hasEv?'border-slate-100 bg-slate-50':
-                  firstEv.type==='education'?'border-indigo-200 bg-indigo-50':
-                  firstEv.type==='interview'?'border-emerald-200 bg-emerald-50':
-                  i===0?'border-amber-200 bg-amber-50':'border-slate-200 bg-white';
-                const toneHead = !hasEv?'text-slate-300':
-                  i===0?'text-amber-600':'text-slate-600';
+                const cat = hasEv ? (SCHED_CATS[firstEv.type]||SCHED_CATS.other) : null;
+                const toneCard = !hasEv ? 'border-slate-100 bg-slate-50' : cat.card;
+                const toneHead = !hasEv ? 'text-slate-300' : cat.head;
                 return (
                   <button key={iso} onClick={()=>nav('calendar')}
                     className={cn('shrink-0 rounded-xl border p-3 text-left transition-colors', toneCard, 'w-[88px]')}>
@@ -653,8 +659,8 @@ function HomeScreen() {
                     {!hasEv
                       ? <div className="text-[10px] text-slate-300">予定なし</div>
                       : evs.slice(0,2).map((e,j)=>{
-                          const icon = e.type==='education'?'📚':e.type==='interview'?'💬':'✅';
-                          return <div key={j} className="text-[10px] text-slate-700 leading-tight line-clamp-2">{icon} {e.title}</div>;
+                          const ec = SCHED_CATS[e.type]||SCHED_CATS.other;
+                          return <div key={j} className={cn('text-[10px] leading-tight line-clamp-1 font-medium', ec.head)}>{e.title}</div>;
                         })
                     }
                     {evs.length > 2 && <div className="text-[10px] text-slate-400 mt-0.5">+{evs.length-2}件</div>}
@@ -989,7 +995,7 @@ ${source}${extraPart}`);
   const save = async () => {
     if (!reply.trim()) return;
     setSaving(true);
-    await sb.from('skills').update({ usage_count: (skill.usage_count||0)+1, last_used_at: new Date().toISOString().split('T')[0] }).eq('id', skill.id).eq('user_id', user.id);
+    await sb.from('skills').update({ usage_count: (skill.usage_count||0)+1, last_used_at: localIso() }).eq('id', skill.id).eq('user_id', user.id);
     setSaving(false); setSaved(true);
   };
 
@@ -1119,7 +1125,7 @@ function SkillSmartRun({ skills, onClose }) {
     if (!reply.trim() || !chosen) return;
     setSaving(true);
     const s = chosen.skill;
-    await sb.from('skills').update({ usage_count: (s.usage_count||0)+1, last_used_at: new Date().toISOString().split('T')[0] }).eq('id', s.id).eq('user_id', user.id);
+    await sb.from('skills').update({ usage_count: (s.usage_count||0)+1, last_used_at: localIso() }).eq('id', s.id).eq('user_id', user.id);
     await sb.from('knowledge_items').insert({ user_id: user.id, title: `Smart Run：${goal.slice(0,30)}`, category: 'general', content: `## やりたいこと\n${goal}\n\n## 元テキスト\n${source}\n\n## 使用Skill\n${s.name}\n\n## 出力\n${reply}`, tags: ['SmartRun', s.name], source_ref: 'Nexus Smart Run' });
     setSaving(false); setSaved(true);
   };
@@ -1663,7 +1669,7 @@ function SkillsScreen() {
     load();
   };
   const recordUsage = async (sk) => {
-    await sb.from('skills').update({ usage_count: (sk.usage_count||0)+1, last_used_at: new Date().toISOString().split('T')[0] }).eq('id', sk.id).eq('user_id', user.id);
+    await sb.from('skills').update({ usage_count: (sk.usage_count||0)+1, last_used_at: localIso() }).eq('id', sk.id).eq('user_id', user.id);
     load();
   };
   const getCat = (name) => categories.find(c=>c.name===name) || { name: name||'未設定', tone:'slate' };
@@ -3070,7 +3076,7 @@ function StaffDetailScreen({ id }) {
   };
   useEffect(() => { load(); }, [id]);
 
-  const today = () => new Date().toISOString().split('T')[0];
+  const today = () => localIso();
   const mark = async (field) => {
     setMarking(field);
     await sb.from('staff_profiles').update({ [field]: today() }).eq('id', id).eq('user_id', user.id);
@@ -3532,7 +3538,7 @@ function CaptureScreen() {
   const [step, setStep] = useState(1); // 1:input 2:bridge 3:preview
   const [relatedDoc, setRelatedDoc] = useState('');
   const [showExport, setShowExport] = useState(false);
-  const [actualDate, setActualDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [actualDate, setActualDate] = useState(() => localIso());
   const [isUrgent, setIsUrgent] = useState(false);
 
   const generate = () => {
@@ -3592,7 +3598,7 @@ function CaptureScreen() {
     fetchTable('knowledge'); fetchTable('staff');
     setSaving(false); setSaved(true);
     setRaw(''); setPrompt(''); setReply(''); setParsed(null); setStep(1); setRelatedDoc('');
-    setActualDate(new Date().toISOString().split('T')[0]); setIsUrgent(false);
+    setActualDate(localIso()); setIsUrgent(false);
   };
 
   return (
@@ -3782,6 +3788,19 @@ function MonthlyReviewBridge({ opps, skills }) {
   );
 }
 
+// ─── SCHEDULE CATEGORIES ─────────────────────────────────
+const SCHED_CATS = {
+  education: { label:'教育',      icon:'📚', card:'border-indigo-300 bg-indigo-100', head:'text-indigo-700', dot:'bg-indigo-500' },
+  interview: { label:'面談',      icon:'💬', card:'border-emerald-300 bg-emerald-100', head:'text-emerald-700', dot:'bg-emerald-500' },
+  meeting:   { label:'打ち合わせ', icon:'🤝', card:'border-purple-300 bg-purple-100', head:'text-purple-700', dot:'bg-purple-500' },
+  followup:  { label:'フォロー',   icon:'📞', card:'border-amber-300 bg-amber-100', head:'text-amber-700', dot:'bg-amber-500' },
+  deadline:  { label:'締切',      icon:'⏰', card:'border-rose-300 bg-rose-100', head:'text-rose-600', dot:'bg-rose-500' },
+  report:    { label:'報告',      icon:'📝', card:'border-sky-300 bg-sky-100', head:'text-sky-700', dot:'bg-sky-500' },
+  training:  { label:'研修',      icon:'🎯', card:'border-blue-300 bg-blue-100', head:'text-blue-700', dot:'bg-blue-500' },
+  other:     { label:'その他',    icon:'○',  card:'border-slate-200 bg-slate-50', head:'text-slate-500', dot:'bg-slate-400' },
+};
+function schedCat(s) { return SCHED_CATS[s?.category] || SCHED_CATS[s?.type] || SCHED_CATS.other; }
+
 // ─── CALENDAR SCREEN ──────────────────────────────────────
 function CalendarScreen() {
   const { sb, user, store, storeLoaded, fetchTable } = useApp();
@@ -3816,7 +3835,7 @@ function CalendarScreen() {
   }, [store.staff, store.schedules]);
 
   const today = new Date(); today.setHours(0,0,0,0);
-  const isoStr = (d) => d.toISOString().split('T')[0];
+  const isoStr = (d) => localIso(d);
   const WEEKDAY_SHORT = ['日','月','火','水','木','金','土'];
 
   const toggleDone = async (ev) => {
@@ -3855,14 +3874,11 @@ function CalendarScreen() {
     return { label:`${d.getFullYear()}年${d.getMonth()+1}月`, cells };
   },[monthOffset, today]);
 
-  const EventBadge = ({ev}) => (
+  const EventBadge = ({ev}) => {
+    const cat = SCHED_CATS[ev.type] || SCHED_CATS.other;
+    return (
     <div className={cn('flex items-center gap-1 text-xs py-1 px-2 rounded mb-0.5 group',
-      ev.done?'bg-slate-100 text-slate-400':
-      ev.type==='education'?'bg-indigo-100 text-indigo-700':
-      ev.type==='interview'?'bg-emerald-100 text-emerald-700':
-      ev.type==='meeting'?'bg-purple-100 text-purple-700':
-      ev.type==='deadline'?'bg-rose-100 text-rose-600':
-      'bg-slate-100 text-slate-600')}>
+      ev.done?'bg-slate-100 text-slate-400':`${cat.card} ${cat.head}`)}>
       <span className={cn('flex-1 truncate', ev.done&&'line-through')} onClick={()=>ev.id&&setEditItem(ev.raw)}>{ev.label}</span>
       {!ev.readonly && (
         <button onClick={()=>toggleDone(ev)} className="opacity-0 group-hover:opacity-100 shrink-0 text-[10px] px-1 rounded bg-white/60">
@@ -3870,7 +3886,7 @@ function CalendarScreen() {
         </button>
       )}
     </div>
-  );
+  );};
 
   const DayCell = ({iso}) => {
     const d = new Date(iso+'T12:00:00');
@@ -3963,12 +3979,7 @@ function CalendarScreen() {
                   {dayEvs.length > 0 && (
                     <div className="mt-0.5 flex flex-wrap gap-0.5 justify-center">
                       {dayEvs.slice(0,3).map((e,i)=>(
-                        <span key={i} className={cn('h-1.5 w-1.5 rounded-full',
-                          e.done?'bg-slate-300':
-                          e.type==='education'?'bg-indigo-500':
-                          e.type==='interview'?'bg-emerald-500':
-                          e.type==='meeting'?'bg-purple-500':
-                          e.type==='deadline'?'bg-rose-500':'bg-slate-400')}/>
+                        <span key={i} className={cn('h-1.5 w-1.5 rounded-full', e.done?'bg-slate-300':(SCHED_CATS[e.type]||SCHED_CATS.other).dot)}/>
                       ))}
                       {dayEvs.length>3 && <span className="text-[8px] text-slate-400">+{dayEvs.length-3}</span>}
                     </div>
@@ -4042,10 +4053,10 @@ function CalendarAddModal({ date, onClose, onSaved }) {
   };
   return (
     <FullModal title="予定を追加" onClose={onClose} onSave={save} saving={saving}>
-      <Sel label="種別" value={category} onChange={e=>{setCategory(e.target.value);}}>
-        <option value="education">📚 教育</option>
-        <option value="interview">💬 面談</option>
-        <option value="task">✅ タスク・その他</option>
+      <Sel label="種別" value={category} onChange={e=>setCategory(e.target.value)}>
+        {Object.entries(SCHED_CATS).map(([k,v])=>(
+          <option key={k} value={k}>{v.icon} {v.label}</option>
+        ))}
       </Sel>
 
       {(category==='education'||category==='interview') ? (
@@ -4091,10 +4102,9 @@ function CalendarEditModal({ item, onClose, onSaved }) {
     <FullModal title="予定を編集" onClose={onClose} onSave={save} saving={saving}>
       <Inp label="タイトル" required value={title} onChange={e=>setTitle(e.target.value)}/>
       <Sel label="種別" value={type} onChange={e=>setType(e.target.value)}>
-        <option value="task">タスク</option>
-        <option value="meeting">打ち合わせ</option>
-        <option value="deadline">締切</option>
-        <option value="other">その他</option>
+        {Object.entries(SCHED_CATS).map(([k,v])=>(
+          <option key={k} value={k}>{v.icon} {v.label}</option>
+        ))}
       </Sel>
       <Inp label="担当者（誰が実施するか）" value={assignee} onChange={e=>setAssignee(e.target.value)} placeholder="本橋 / 岩間リーダー など"/>
       <Inp label="日付" type="date" value={scheduledDate} onChange={e=>setScheduledDate(e.target.value)}/>
@@ -4163,14 +4173,29 @@ function ScheduleImport({ onClose, onSaved }) {
       )}
       <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
         <summary className="cursor-pointer text-xs font-medium text-slate-600">JSON形式の例</summary>
-        <pre className="mt-2 font-mono text-[10px] text-slate-600">{`[
+        <pre className="mt-2 font-mono text-[10px] text-slate-600 whitespace-pre-wrap">{`[
   {
     "title": "黒田くん 教育",
+    "category": "education",
     "scheduled_date": "2026-06-14",
-    "type": "task",
+    "assignee": "本橋",
+    "staff_name": "黒田",
     "notes": ""
+  },
+  {
+    "title": "飯島さん 面談",
+    "category": "interview",
+    "scheduled_date": "2026-06-18",
+    "assignee": "岩間リーダー",
+    "notes": "モチベーション確認"
   }
-]`}</pre>
+]
+
+category 一覧:
+education（教育）/ interview（面談）
+meeting（打ち合わせ）/ followup（フォロー）
+deadline（締切）/ report（報告）
+training（研修）/ other（その他）`}</pre>
       </details>
     </FullModal>
   );
