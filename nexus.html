@@ -553,51 +553,29 @@ function AuthScreen({ sb }) {
 
 // ─── HOME SCREEN ──────────────────────────────────────────
 function HomeScreen() {
-  const { sb, user, nav } = useApp();
-  const [skills, setSkills] = useState([]);
-  const [staffFollow, setStaffFollow] = useState({ edNoSched:[], edScheduled:[], ivNoSched:[], ivScheduled:[], weekEvents:[] });
-  const [loading, setLoading] = useState(true);
+  const { sb, user, nav, store, storeLoaded, syncing, refreshAll } = useApp();
+  const skills = store.skills;
+  const loading = !storeLoaded;
   const [showSmartRun, setShowSmartRun] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      const { data: sk } = await sb.from('skills').select('*').eq('user_id', user.id);
-      setSkills(sk || []);
-      // スタッフのフォロー漏れ + 今週の予定（スケジュール）
-      try {
-        const today = new Date(); today.setHours(0,0,0,0);
-        const daysSince = (iso) => { if (!iso) return 999; const d=new Date(iso); d.setHours(0,0,0,0); return Math.round((today-d)/86400000); };
-        const daysUntilDate = (iso) => { if (!iso) return null; const d=new Date(iso); d.setHours(0,0,0,0); return Math.round((d-today)/86400000); };
-
-        const [{ data: st }, { data: scheds }] = await Promise.all([
-          sb.from('staff_profiles').select('name,last_education_at,last_interview_at,next_education_at,next_interview_at,is_active').eq('user_id', user.id),
-          sb.from('schedules').select('title,scheduled_date,category,assignee,status').eq('user_id', user.id).eq('status','todo'),
-        ]);
-
-        let edNoSched=[], edScheduled=[], ivNoSched=[], ivScheduled=[];
-        if (st) {
-          const active = st.filter(s => s.is_active);
-          const needsEdu = active.filter(s => daysSince(s.last_education_at) >= 14);
-          const needsIv  = active.filter(s => daysSince(s.last_interview_at) >= 30);
-          edNoSched   = needsEdu.filter(s => !s.next_education_at);
-          edScheduled = needsEdu.filter(s =>  s.next_education_at);
-          ivNoSched   = needsIv.filter(s =>  !s.next_interview_at);
-          ivScheduled = needsIv.filter(s =>   s.next_interview_at);
-        }
-
-        // 今週の予定はスケジュールから（担当者付き）
-        const weekEvents = (scheds||[]).flatMap(s => {
-          const du = daysUntilDate(s.scheduled_date);
-          if (du === null || du < 0 || du > 7) return [];
-          return [{ title:s.title, type:s.category||'task', assignee:s.assignee||'', date:s.scheduled_date, daysUntil:du }];
-        }).sort((a,b)=>a.daysUntil-b.daysUntil);
-
-        setStaffFollow({ edNoSched, edScheduled, ivNoSched, ivScheduled, weekEvents });
-      } catch(e) {}
-      setLoading(false);
-    };
-    load();
-  }, []);
+  const staffFollow = useMemo(() => {
+    const t = new Date(); t.setHours(0,0,0,0);
+    const daysSince = (iso) => { if (!iso) return 999; const d=new Date(iso); d.setHours(0,0,0,0); return Math.round((t-d)/86400000); };
+    const daysUntilDate = (iso) => { if (!iso) return null; const d=new Date(iso); d.setHours(0,0,0,0); return Math.round((d-t)/86400000); };
+    const active = (store.staff||[]).filter(s => s.is_active);
+    const needsEdu = active.filter(s => daysSince(s.last_education_at) >= 14);
+    const needsIv  = active.filter(s => daysSince(s.last_interview_at) >= 30);
+    const edNoSched   = needsEdu.filter(s => !s.next_education_at);
+    const edScheduled = needsEdu.filter(s =>  s.next_education_at);
+    const ivNoSched   = needsIv.filter(s =>  !s.next_interview_at);
+    const ivScheduled = needsIv.filter(s =>   s.next_interview_at);
+    const weekEvents = (store.schedules||[]).filter(s=>s.status==='todo').flatMap(s => {
+      const du = daysUntilDate(s.scheduled_date);
+      if (du === null || du < 0 || du > 7) return [];
+      return [{ title:s.title, type:s.category||'task', assignee:s.assignee||'', date:s.scheduled_date, daysUntil:du }];
+    }).sort((a,b)=>a.daysUntil-b.daysUntil);
+    return { edNoSched, edScheduled, ivNoSched, ivScheduled, weekEvents };
+  }, [store.staff, store.schedules]);
 
   const today = new Date().toLocaleDateString('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'long',day:'numeric',weekday:'short'});
 
@@ -617,7 +595,10 @@ function HomeScreen() {
   if (loading) return <LoadingState/>;
   return (
     <>
-      <PageHeader title="Nexus" subtitle={today}/>
+      <PageHeader title="Nexus" subtitle={today}
+        action={<Btn variant="ghost" size="sm" onClick={()=>refreshAll(false)} disabled={syncing}>
+          <Repeat2Icon size={14} className={syncing?'animate-spin':''}/> {syncing?'同期中':'更新'}
+        </Btn>}/>
 
       {/* フォロー・予定アラート */}
       {(staffFollow.edNoSched.length > 0 || staffFollow.ivNoSched.length > 0) && (
@@ -1608,24 +1589,20 @@ ${kwTxt}
 
 // ─── SKILL LIST ───────────────────────────────────────────
 function SkillsScreen() {
-  const { sb, user } = useApp();
-  const [skills, setSkills] = useState([]);
+  const { sb, user, store, storeLoaded, fetchTable } = useApp();
+  const skills = store.skills;
   const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [catLoaded, setCatLoaded] = useState(false);
   const [err, setErr] = useState('');
   const [editing, setEditing] = useState(null);
   const [runningSkill, setRunningSkill] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
-  const [modal, setModal] = useState(null); // manual|builder|import|export|incubator|category|smartrun
+  const [modal, setModal] = useState(null);
+  const loading = !storeLoaded || !catLoaded;
 
   const load = async () => {
-    setLoading(true);
-    const [{ data: s, error }, { data: c }] = await Promise.all([
-      sb.from('skills').select('*').eq('user_id', user.id).order('usage_count', { ascending: false }),
-      sb.from('skill_categories').select('*').eq('user_id', user.id).order('sort_order'),
-    ]);
-    if (error) setErr(error.message);
-    setSkills(s||[]);
+    await fetchTable('skills');
+    const { data: c } = await sb.from('skill_categories').select('*').eq('user_id', user.id).order('sort_order');
     let cats = c||[];
     if (cats.length === 0) {
       const toInsert = SEED_CATEGORIES.map(d=>({ ...d, user_id: user.id }));
@@ -1633,7 +1610,7 @@ function SkillsScreen() {
       cats = seeded || SEED_CATEGORIES;
     }
     setCategories(cats);
-    setLoading(false);
+    setCatLoaded(true);
   };
   useEffect(() => { load(); }, []);
 
@@ -1752,21 +1729,15 @@ function KnowledgeForm({ initial, onClose, onSaved }) {
 
 // ─── KNOWLEDGE LIST ───────────────────────────────────────
 function KnowledgeScreen() {
-  const { sb, user, nav } = useApp();
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { sb, user, nav, store, storeLoaded, fetchTable } = useApp();
+  const items = store.knowledge;
+  const loading = !storeLoaded;
   const [err, setErr] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState('');
 
-  const load = async () => {
-    setLoading(true);
-    const { data, error } = await sb.from('knowledge_items').select('*').eq('user_id', user.id).order('updated_at', { ascending: false });
-    if (error) setErr(error.message); else setItems(data||[]);
-    setLoading(false);
-  };
-  useEffect(() => { load(); }, []);
+  const load = async () => { await fetchTable('knowledge'); };
 
   const del = async (id) => {
     if (!confirm('このナレッジを削除しますか？')) return;
@@ -1912,10 +1883,11 @@ function ScheduleForm({ initial, opps, onClose, onSaved }) {
 }
 
 function ScheduleScreen() {
-  const { sb, user } = useApp();
-  const [items, setItems] = useState([]);
+  const { sb, user, store, storeLoaded, fetchTable } = useApp();
+  const items = store.schedules;
   const [opps, setOpps] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [oppLoaded, setOppLoaded] = useState(false);
+  const loading = !storeLoaded || !oppLoaded;
   const [filter, setFilter] = useState('todo');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -1923,12 +1895,9 @@ function ScheduleScreen() {
   const [selDate, setSelDate] = useState(null);
 
   const load = async () => {
-    setLoading(true);
-    const [{ data: s }, { data: o }] = await Promise.all([
-      sb.from('schedules').select('*').eq('user_id', user.id).order('scheduled_date', { ascending: true }),
-      sb.from('opportunities').select('id,title').eq('user_id', user.id).order('title'),
-    ]);
-    setItems(s||[]); setOpps(o||[]); setLoading(false);
+    await fetchTable('schedules');
+    const { data: o } = await sb.from('opportunities').select('id,title').eq('user_id', user.id).order('title');
+    setOpps(o||[]); setOppLoaded(true);
   };
   useEffect(() => { load(); }, []);
 
@@ -3051,7 +3020,7 @@ function StaffForm({ initial, onClose, onSaved }) {
 }
 
 function StaffDetailScreen({ id }) {
-  const { sb, user, back } = useApp();
+  const { sb, user, back, fetchTable } = useApp();
   const [st, setSt] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
@@ -3068,11 +3037,13 @@ function StaffDetailScreen({ id }) {
     setMarking(field);
     await sb.from('staff_profiles').update({ [field]: today() }).eq('id', id).eq('user_id', user.id);
     setSt(v => ({ ...v, [field]: today() }));
+    fetchTable('staff');
     setMarking('');
   };
   const del = async () => {
     if (!confirm('このスタッフを削除しますか？')) return;
     await sb.from('staff_profiles').delete().eq('id', id).eq('user_id', user.id);
+    fetchTable('staff');
     back();
   };
 
@@ -3127,7 +3098,7 @@ function StaffDetailScreen({ id }) {
           </div>
         )}
 
-      {showEdit && <StaffForm initial={st} onClose={()=>setShowEdit(false)} onSaved={()=>{setShowEdit(false);load();}}/>}
+      {showEdit && <StaffForm initial={st} onClose={()=>setShowEdit(false)} onSaved={()=>{setShowEdit(false);load();fetchTable('staff');}}/>}
     </>
   );
 }
@@ -3511,7 +3482,7 @@ function buildCaptureContent(p) {
 }
 
 function CaptureScreen() {
-  const { sb, user, back } = useApp();
+  const { sb, user, back, fetchTable } = useApp();
   const [raw, setRaw] = useState('');
   const [prompt, setPrompt] = useState('');
   const [reply, setReply] = useState('');
@@ -3580,6 +3551,7 @@ function CaptureScreen() {
         }
       }
     }
+    fetchTable('knowledge'); fetchTable('staff');
     setSaving(false); setSaved(true);
     setRaw(''); setPrompt(''); setReply(''); setParsed(null); setStep(1); setRelatedDoc('');
     setActualDate(new Date().toISOString().split('T')[0]); setIsUrgent(false);
@@ -3774,9 +3746,8 @@ function MonthlyReviewBridge({ opps, skills }) {
 
 // ─── CALENDAR SCREEN ──────────────────────────────────────
 function CalendarScreen() {
-  const { sb, user } = useApp();
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { sb, user, store, storeLoaded, fetchTable } = useApp();
+  const loading = !storeLoaded;
   const [view, setView] = useState('month');
   const [weekOffset, setWeekOffset] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
@@ -3785,17 +3756,16 @@ function CalendarScreen() {
   const [showImport, setShowImport] = useState(false);
   const [selDate, setSelDate] = useState(null);
 
-  const load = async () => {
-    const [{ data: staff }, { data: scheds }] = await Promise.all([
-      sb.from('staff_profiles').select('name,next_education_at,next_interview_at,is_active').eq('user_id', user.id),
-      sb.from('schedules').select('*').eq('user_id', user.id).order('scheduled_date'),
-    ]);
+  const load = async () => { await fetchTable('staff'); await fetchTable('schedules'); };
+  useEffect(()=>{ load(); },[]);
+
+  const events = useMemo(()=>{
     const evs = [];
-    (staff||[]).filter(s=>s.is_active).forEach(s => {
+    (store.staff||[]).filter(s=>s.is_active).forEach(s => {
       if (s.next_education_at) evs.push({ date:s.next_education_at, label:`📚 ${s.name} 教育`, type:'education', source:'staff', readonly:true });
       if (s.next_interview_at) evs.push({ date:s.next_interview_at, label:`💬 ${s.name} 面談`, type:'interview', source:'staff', readonly:true });
     });
-    (scheds||[]).forEach(s => {
+    (store.schedules||[]).forEach(s => {
       if (s.scheduled_date) {
         const cat = s.category;
         const dispType = cat==='education'?'education':cat==='interview'?'interview':s.type;
@@ -3804,10 +3774,8 @@ function CalendarScreen() {
       }
     });
     evs.sort((a,b)=>a.date<b.date?-1:1);
-    setEvents(evs);
-    setLoading(false);
-  };
-  useEffect(()=>{ load(); },[]);
+    return evs;
+  }, [store.staff, store.schedules]);
 
   const today = new Date(); today.setHours(0,0,0,0);
   const isoStr = (d) => d.toISOString().split('T')[0];
@@ -3817,12 +3785,12 @@ function CalendarScreen() {
     if (!ev.id) return;
     const next = ev.done ? 'todo' : 'done';
     await sb.from('schedules').update({ status:next }).eq('id',ev.id).eq('user_id',user.id);
-    load();
+    fetchTable('schedules');
   };
   const del = async (ev) => {
     if (!ev.id || !confirm('削除しますか？')) return;
     await sb.from('schedules').delete().eq('id',ev.id).eq('user_id',user.id);
-    load();
+    fetchTable('schedules');
   };
 
   // Week
@@ -4422,6 +4390,46 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [history, setHistory] = useState([{ screen: 'home' }]);
 
+  // ─── 共有データストア（方式1：保存時のみ該当テーブル再取得）───
+  const [store, setStore] = useState({ skills:[], staff:[], knowledge:[], schedules:[] });
+  const [storeLoaded, setStoreLoaded] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const fetchTable = useCallback(async (key) => {
+    if (!sb || !user) return;
+    const q = {
+      skills:    () => sb.from('skills').select('*').eq('user_id', user.id).order('usage_count', { ascending: false }),
+      staff:     () => sb.from('staff_profiles').select('*').eq('user_id', user.id).order('is_active', { ascending:false }).order('sort_order').order('name'),
+      knowledge: () => sb.from('knowledge_items').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }),
+      schedules: () => sb.from('schedules').select('*').eq('user_id', user.id).order('scheduled_date', { ascending: true }),
+    }[key];
+    if (!q) return;
+    try {
+      const { data } = await q();
+      setStore(s => ({ ...s, [key]: data || [] }));
+    } catch(e) {}
+  }, [sb, user]);
+
+  const refreshAll = useCallback(async (silent=false) => {
+    if (!sb || !user) return;
+    if (!silent) setSyncing(true);
+    await Promise.all([fetchTable('skills'), fetchTable('staff'), fetchTable('knowledge'), fetchTable('schedules')]);
+    setStoreLoaded(true);
+    if (!silent) setSyncing(false);
+  }, [sb, user, fetchTable]);
+
+  // 初回ロード
+  useEffect(() => {
+    if (sb && user && !storeLoaded) refreshAll(true);
+  }, [sb, user, storeLoaded, refreshAll]);
+
+  // 5分毎バックグラウンド同期
+  useEffect(() => {
+    if (!sb || !user) return;
+    const t = setInterval(() => refreshAll(true), 5*60*1000);
+    return () => clearInterval(t);
+  }, [sb, user, refreshAll]);
+
   const currentRoute = history[history.length - 1];
 
   const nav = useCallback((screen, params = {}) => {
@@ -4456,7 +4464,7 @@ function App() {
   if (authLoading) return <div className="flex min-h-screen items-center justify-center text-sm text-slate-400">起動中...</div>;
   if (!user) return <AuthScreen sb={sb}/>;
 
-  const ctx = { sb, user, nav, back, navTo, currentRoute };
+  const ctx = { sb, user, nav, back, navTo, currentRoute, store, storeLoaded, syncing, fetchTable, refreshAll };
 
   const renderScreen = () => {
     const { screen, id } = currentRoute;
