@@ -592,6 +592,7 @@ function HomeScreen() {
     { key:'capture',  icon:'🎤', title:'Capture',   desc:'30秒で保存する',       screen:'capture',  tone:'indigo' },
     { key:'smartrun', icon:'⚡', title:'Smart Run',  desc:'今やるべきことを確認', action:()=>setShowSmartRun(true), tone:'amber' },
     { key:'calendar', icon:'🗓', title:'カレンダー', desc:'予定・スケジュール',    screen:'calendar', tone:'slate' },
+    { key:'logs',     icon:'📋', title:'記録ログ',   desc:'教育・面談・MTG一覧',  screen:'logs',     tone:'slate' },
     { key:'review',   icon:'📊', title:'レビュー',   desc:'週次振り返り・現在地',  screen:'review',   tone:'emerald' },
     { key:'skills',   icon:'⭐', title:'Skill',       desc:'再利用テンプレート',   screen:'skills',   tone:'indigo' },
   ];
@@ -3195,7 +3196,7 @@ function StaffForm({ initial, onClose, onSaved }) {
 }
 
 // ─── LOG ACCORDION ────────────────────────────────────────
-function LogAccordion({ date, what, why, next, risk, related, urgent, fullContent, logId, staffId, category, onUpdated }) {
+function LogAccordion({ date, what, why, next, risk, related, urgent, fullContent, logId, staffId, category, subtitle, onUpdated }) {
   const { sb, user } = useApp();
   const [open, setOpen] = useState(false);
   const [editingDate, setEditingDate] = useState(false);
@@ -3245,7 +3246,7 @@ function LogAccordion({ date, what, why, next, risk, related, urgent, fullConten
         <button onClick={()=>setOpen(v=>!v)}
           className="flex-1 flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50">
           <span className="font-mono text-xs text-slate-400 shrink-0">{actualDateFromContent||date}</span>
-          <span className="flex-1 truncate text-sm text-slate-700">{what||'記録'}</span>
+          <span className="flex-1 truncate text-sm text-slate-700">{what||'記録'}{subtitle && <span className="ml-1 text-xs text-slate-400">· {subtitle}</span>}</span>
           <div className="flex items-center gap-1.5 shrink-0">
             {urgent && <Badge tone="rose">緊急</Badge>}
             <ChevronRightIcon size={14} className={cn('text-slate-300 transition-transform', open&&'rotate-90')}/>
@@ -3801,6 +3802,264 @@ function DatePatchModal({ onClose }) {
 
 // ─── CAPTURE BATCH IMPORT ────────────────────────────────
 // ─── REVIEW SCREEN（週次レビュー・現在地マップ）────────────
+// ─── LOG SCREEN（教育・面談・MTG一覧）──────────────────────
+function LogScreen() {
+  const { sb, user, store, fetchTable } = useApp();
+  const [tab, setTab] = useState('education'); // education | interview | meeting
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [topics, setTopics] = useState([]);
+  const [filterStaff, setFilterStaff] = useState('');
+  const [filterTopic, setFilterTopic] = useState('');
+  const [filterParticipant, setFilterParticipant] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [showTopicMgr, setShowTopicMgr] = useState(false);
+
+  const loadTopics = async () => {
+    const { data } = await sb.from('mtg_topics').select('*').eq('user_id', user.id).order('sort_order').order('name');
+    setTopics(data||[]);
+  };
+  const load = async () => {
+    setLoading(true);
+    const { data } = await sb.from('knowledge_items').select('*').eq('user_id', user.id)
+      .eq('category', tab).order('created_at', { ascending: false });
+    setLogs(data||[]);
+    setLoading(false);
+  };
+  useEffect(()=>{ load(); }, [tab]);
+  useEffect(()=>{ loadTopics(); }, []);
+
+  // 実施日を抽出
+  const getActualDate = (item) => {
+    const c = item.content || '';
+    const lines = c.split('\n');
+    for (let i=0;i<lines.length;i++){
+      if (lines[i].includes('■ 実施日')) return (lines[i+1]||'').trim();
+      if (lines[i].startsWith('【Capture Raw】実施日：')) return lines[i].split('実施日：')[1]?.slice(0,10);
+    }
+    return (item.created_at||'').slice(0,10);
+  };
+
+  // フィルタ適用
+  const filtered = useMemo(()=>{
+    let arr = logs;
+    if (tab !== 'meeting' && filterStaff) {
+      const sname = store.staff.find(s=>s.id===filterStaff)?.name;
+      arr = arr.filter(l => l.staff_id === filterStaff || (sname && (l.content||'').includes(sname)));
+    }
+    if (tab === 'meeting' && filterTopic) arr = arr.filter(l => l.mtg_topic === filterTopic);
+    if (tab === 'meeting' && filterParticipant) arr = arr.filter(l => (l.participants||'').includes(filterParticipant));
+    return arr;
+  }, [logs, tab, filterStaff, filterTopic, filterParticipant, store.staff]);
+
+  const getField = (c, label) => {
+    const lines = (c||'').split('\n');
+    for(let i=0;i<lines.length;i++){ if(lines[i].includes('■ '+label)) return (lines[i+1]||'').trim(); }
+    return null;
+  };
+
+  const TABS = [
+    { k:'education', l:'📚 教育' },
+    { k:'interview', l:'💬 面談' },
+    { k:'meeting', l:'🤝 MTG' },
+  ];
+
+  return (
+    <>
+      <PageHeader title="記録ログ" subtitle="教育・面談・MTG"
+        action={<Btn size="sm" onClick={()=>setShowForm(true)}><PlusIcon size={14}/> 追加</Btn>}/>
+
+      <div className="mb-4 flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
+        {TABS.map(({k,l})=>(
+          <button key={k} onClick={()=>{setTab(k);setFilterStaff('');setFilterTopic('');setFilterParticipant('');}}
+            className={cn('flex-1 rounded-lg py-2 text-xs font-medium transition-colors',
+              tab===k?'bg-white text-indigo-700 shadow-sm':'text-slate-500')}>{l}</button>
+        ))}
+      </div>
+
+      {/* フィルタ */}
+      {tab !== 'meeting' ? (
+        <div className="mb-3">
+          <select value={filterStaff} onChange={e=>setFilterStaff(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none">
+            <option value="">全スタッフ</option>
+            {store.staff.filter(s=>s.is_active).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+      ) : (
+        <div className="mb-3 space-y-2">
+          <div className="flex gap-2">
+            <select value={filterTopic} onChange={e=>setFilterTopic(e.target.value)}
+              className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none">
+              <option value="">全題材</option>
+              {topics.map(t=><option key={t.id} value={t.name}>{t.name}</option>)}
+            </select>
+            <Btn variant="outline" size="sm" onClick={()=>setShowTopicMgr(true)}>題材管理</Btn>
+          </div>
+          <input value={filterParticipant} onChange={e=>setFilterParticipant(e.target.value)}
+            placeholder="参加者で絞り込み（名前の一部）"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none"/>
+        </div>
+      )}
+
+      {loading ? <LoadingState/> : (
+        filtered.length === 0
+          ? <EmptyState message="記録がありません" action={<Btn size="sm" variant="secondary" onClick={()=>setShowForm(true)}>記録を追加</Btn>}/>
+          : (
+            <div className="space-y-2">
+              {filtered.map(log => {
+                const what = getField(log.content, tab==='education'?'何をした':tab==='interview'?'何を話した':'議題');
+                const why = getField(log.content, 'なぜ') || getField(log.content, '決定事項');
+                const next = getField(log.content, '次どうする') || getField(log.content, '宿題');
+                const relParts = log.content && log.content.includes('■ 関連資料') ? log.content.split('■ 関連資料') : null;
+                const related = relParts ? (relParts[1]||'').replace(/^\s+/,'').trim() || null : null;
+                return (
+                  <LogAccordion key={log.id}
+                    date={getActualDate(log)}
+                    what={what || log.title}
+                    why={why} next={next} risk={null} related={related}
+                    urgent={log.tags?.includes('urgent')}
+                    fullContent={log.content}
+                    logId={log.id}
+                    staffId={log.staff_id}
+                    category={tab}
+                    subtitle={tab==='meeting' ? [log.mtg_topic, log.participants].filter(Boolean).join(' / ') : null}
+                    onUpdated={load}
+                  />
+                );
+              })}
+            </div>
+          )
+      )}
+
+      {showForm && <LogForm category={tab} topics={topics} onClose={()=>setShowForm(false)}
+        onSaved={()=>{setShowForm(false);load();fetchTable('staff');}} onTopicAdded={loadTopics}/>}
+      {showTopicMgr && <MtgTopicManager topics={topics} onClose={()=>setShowTopicMgr(false)} onChanged={loadTopics}/>}
+    </>
+  );
+}
+
+// ─── LOG FORM ─────────────────────────────────────────────
+function LogForm({ category, topics, onClose, onSaved, onTopicAdded }) {
+  const { sb, user, store } = useApp();
+  const [date, setDate] = useState(localIso());
+  const [staffId, setStaffId] = useState('');
+  const [topic, setTopic] = useState('');
+  const [participants, setParticipants] = useState('');
+  const [what, setWhat] = useState('');
+  const [why, setWhy] = useState('');
+  const [next, setNext] = useState('');
+  const [related, setRelated] = useState('');
+  const [urgent, setUrgent] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const isMtg = category === 'meeting';
+  const typeLabel = category==='education'?'教育ログ':category==='interview'?'面談ログ':'MTGログ';
+  const whatLabel = category==='education'?'何をした':category==='interview'?'何を話した':'議題';
+  const whyLabel = isMtg?'決定事項':'なぜ';
+  const nextLabel = isMtg?'宿題・次のアクション':'次どうする';
+
+  const save = async () => {
+    if (!what.trim()) return;
+    setSaving(true);
+    const staffName = staffId ? store.staff.find(s=>s.id===staffId)?.name : '';
+    const lines = ['【'+typeLabel+'】','','■ 実施日',date,''];
+    if (isMtg) {
+      lines.push('■ 題材', topic, '', '■ 参加者', participants, '');
+    } else {
+      lines.push('■ 誰に', staffName||'', '');
+    }
+    lines.push('■ '+whatLabel, what, '', '■ '+whyLabel, why, '', '■ '+nextLabel, next);
+    if (related.trim()) lines.push('', '─────────────────', '■ 関連資料', related.trim());
+
+    await sb.from('knowledge_items').insert({
+      user_id: user.id,
+      title: (isMtg ? (topic?topic+' ':'') : (staffName?staffName+' ':'')) + what.slice(0,40),
+      category, content: lines.join('\n'),
+      tags: ['capture', category, ...(urgent?['urgent']:[])],
+      source_ref: '記録ログ',
+      staff_id: staffId || null,
+      mtg_topic: isMtg ? (topic||null) : null,
+      participants: isMtg ? (participants||null) : null,
+    });
+    // スタッフ最終日更新
+    if (staffId && !urgent) {
+      const field = category==='education'?'last_education_at':category==='interview'?'last_interview_at':null;
+      if (field) await sb.from('staff_profiles').update({ [field]: date }).eq('id', staffId).eq('user_id', user.id);
+    }
+    setSaving(false); onSaved();
+  };
+
+  return (
+    <FullModal title={typeLabel+'を追加'} onClose={onClose} onSave={save} saving={saving}>
+      <Inp label="実施日" type="date" value={date} onChange={e=>setDate(e.target.value)}/>
+      {isMtg ? (
+        <>
+          <Sel label="題材" value={topic} onChange={e=>setTopic(e.target.value)}>
+            <option value="">選択してください</option>
+            {topics.map(t=><option key={t.id} value={t.name}>{t.name}</option>)}
+          </Sel>
+          <Inp label="参加者" value={participants} onChange={e=>setParticipants(e.target.value)} placeholder="本橋・佐藤・岩間"/>
+        </>
+      ) : (
+        <Sel label="対象スタッフ" value={staffId} onChange={e=>setStaffId(e.target.value)}>
+          <option value="">選択してください</option>
+          {store.staff.filter(s=>s.is_active).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+        </Sel>
+      )}
+      <Txta label={whatLabel} rows={2} value={what} onChange={e=>setWhat(e.target.value)}/>
+      <Txta label={whyLabel} rows={2} value={why} onChange={e=>setWhy(e.target.value)}/>
+      <Txta label={nextLabel} rows={2} value={next} onChange={e=>setNext(e.target.value)}/>
+      <Txta label="関連資料・議事録（任意）" rows={4} value={related} onChange={e=>setRelated(e.target.value)} placeholder="議事録の全文を貼り付け"/>
+      {!isMtg && (
+        <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+          <input type="checkbox" checked={urgent} onChange={e=>setUrgent(e.target.checked)} className="h-4 w-4 rounded border-slate-300"/>
+          緊急対応（フォロー間隔を更新しない）
+        </label>
+      )}
+    </FullModal>
+  );
+}
+
+// ─── MTG TOPIC MANAGER ────────────────────────────────────
+function MtgTopicManager({ topics, onClose, onChanged }) {
+  const { sb, user } = useApp();
+  const [name, setName] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  const add = async () => {
+    if (!name.trim()) return;
+    setAdding(true);
+    await sb.from('mtg_topics').insert({ user_id: user.id, name: name.trim(), sort_order: topics.length });
+    setName(''); setAdding(false); onChanged();
+  };
+  const del = async (id) => {
+    if (!confirm('この題材を削除しますか？（記録自体は残ります）')) return;
+    await sb.from('mtg_topics').delete().eq('id', id).eq('user_id', user.id);
+    onChanged();
+  };
+
+  return (
+    <FullModal title="MTG題材の管理" onClose={onClose}>
+      <p className="text-xs text-slate-500">ビッグ清田・アークス菊水・全体・責任者 などの題材を登録します。</p>
+      <div className="flex gap-2">
+        <input value={name} onChange={e=>setName(e.target.value)} placeholder="新しい題材名"
+          className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none"/>
+        <Btn size="sm" onClick={add} disabled={adding||!name.trim()}><PlusIcon size={14}/></Btn>
+      </div>
+      <div className="space-y-1">
+        {topics.map(t=>(
+          <div key={t.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
+            <span className="text-sm text-slate-700">{t.name}</span>
+            <button onClick={()=>del(t.id)} className="text-rose-400 hover:text-rose-600"><TrashIcon size={14}/></button>
+          </div>
+        ))}
+        {topics.length===0 && <p className="text-xs text-slate-400 text-center py-3">題材がまだありません</p>}
+      </div>
+    </FullModal>
+  );
+}
+
 function ReviewScreen() {
   const { sb, user, store, fetchTable, nav } = useApp();
   const [tab, setTab] = useState('weekly'); // weekly | location
@@ -4922,10 +5181,12 @@ function CalendarAddModal({ date, onClose, onSaved }) {
   const { sb, user } = useApp();
   const [title, setTitle] = useState('');
   const [type, setType] = useState('task');
-  const [category, setCategory] = useState('education'); // education/interview/task
+  const [category, setCategory] = useState('education'); // education/interview/meeting/task
   const [staffName, setStaffName] = useState('');
   const [assignee, setAssignee] = useState('');
   const [staffList, setStaffList] = useState([]);
+  const [topics, setTopics] = useState([]);
+  const [mtgTopic, setMtgTopic] = useState('');
   const [scheduledDate, setScheduledDate] = useState(date);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
@@ -4933,6 +5194,8 @@ function CalendarAddModal({ date, onClose, onSaved }) {
   useEffect(()=>{
     sb.from('staff_profiles').select('name').eq('user_id',user.id).eq('is_active',true)
       .then(({data})=>setStaffList((data||[]).map(s=>s.name)));
+    sb.from('mtg_topics').select('*').eq('user_id',user.id).order('sort_order').order('name')
+      .then(({data})=>setTopics(data||[]));
   },[]);
 
   // 教育/面談を選んだら、対象スタッフ＋種別からタイトル自動生成
@@ -4943,15 +5206,21 @@ function CalendarAddModal({ date, onClose, onSaved }) {
   };
 
   const save = async () => {
-    const finalTitle = (category==='education'||category==='interview')
-      ? (staffName ? `${staffName} ${category==='education'?'教育':'面談'}` : title.trim())
-      : title.trim();
+    let finalTitle;
+    if (category==='education'||category==='interview') {
+      finalTitle = staffName ? `${staffName} ${category==='education'?'教育':'面談'}` : title.trim();
+    } else if (category==='meeting') {
+      finalTitle = mtgTopic || title.trim();
+    } else {
+      finalTitle = title.trim();
+    }
     if (!finalTitle) return;
     setSaving(true);
     await sb.from('schedules').insert({
       user_id:user.id, title:finalTitle,
-      type: category==='education'||category==='interview' ? 'meeting' : type,
+      type: ['education','interview','meeting'].includes(category) ? 'meeting' : type,
       category, staff_name: staffName, assignee,
+      mtg_topic: category==='meeting' ? (mtgTopic||null) : null,
       scheduled_date:scheduledDate||null, status:'todo', notes
     });
     // スタッフの次回日程を自動更新
@@ -4984,6 +5253,11 @@ function CalendarAddModal({ date, onClose, onSaved }) {
             </datalist>
           </Field>
         </>
+      ) : category==='meeting' ? (
+        <Sel label="題材" value={mtgTopic} onChange={e=>setMtgTopic(e.target.value)}>
+          <option value="">選択してください</option>
+          {topics.map(t=><option key={t.id} value={t.name}>{t.name}</option>)}
+        </Sel>
       ) : (
         <Inp label="タイトル" required value={title} onChange={e=>setTitle(e.target.value)} placeholder="月次報告 締切"/>
       )}
@@ -5003,10 +5277,48 @@ function CalendarEditModal({ item, onClose, onSaved }) {
   const [scheduledDate, setScheduledDate] = useState(item.scheduled_date||'');
   const [notes, setNotes] = useState(item.notes||'');
   const [saving, setSaving] = useState(false);
+  const [mtgTopic, setMtgTopic] = useState(item.mtg_topic||'');
+  const [topics, setTopics] = useState([]);
+  const [minutes, setMinutes] = useState([]);
+  const [minutesChecked, setMinutesChecked] = useState(false);
+  const [openMinutes, setOpenMinutes] = useState(null);
+
+  useEffect(()=>{
+    sb.from('mtg_topics').select('*').eq('user_id',user.id).order('sort_order').order('name')
+      .then(({data})=>setTopics(data||[]));
+  },[]);
+
+  // 議事録を実施日で探す（教育/面談/MTG）
+  const findMinutes = async () => {
+    const cat = item.category || (type==='meeting'?'meeting':type==='education'?'education':type==='interview'?'interview':null);
+    if (!scheduledDate) { setMinutesChecked(true); return; }
+    const { data } = await sb.from('knowledge_items').select('*').eq('user_id', user.id)
+      .contains('tags', ['capture']).order('created_at',{ascending:false});
+    const targetCats = cat ? [cat] : ['meeting','education','interview'];
+    const hits = (data||[]).filter(k => {
+      if (!targetCats.includes(k.category)) return false;
+      const c = k.content||'';
+      if (!c.includes(scheduledDate)) return false;
+      // MTGは題材が一致するものを優先（題材設定時のみ絞る）
+      if (k.category==='meeting' && mtgTopic && k.mtg_topic) {
+        return k.mtg_topic === mtgTopic;
+      }
+      return true;
+    });
+    setMinutes(hits);
+    setMinutesChecked(true);
+  };
+  useEffect(()=>{ findMinutes(); }, [scheduledDate, mtgTopic, type]);
+
+  const getField = (c, label) => {
+    const lines=(c||'').split('\n');
+    for(let i=0;i<lines.length;i++){ if(lines[i].includes('■ '+label)) return (lines[i+1]||'').trim(); }
+    return null;
+  };
 
   const save = async () => {
     setSaving(true);
-    await sb.from('schedules').update({ title:title.trim(), type, assignee, scheduled_date:scheduledDate||null, notes }).eq('id',item.id).eq('user_id',user.id);
+    await sb.from('schedules').update({ title: type==='meeting'&&mtgTopic ? mtgTopic : title.trim(), type, assignee, mtg_topic: type==='meeting'?(mtgTopic||null):null, scheduled_date:scheduledDate||null, notes }).eq('id',item.id).eq('user_id',user.id);
     // スタッフ日程も更新
     if (item.staff_name && scheduledDate) {
       const field = item.category==='education'?'next_education_at':item.category==='interview'?'next_interview_at':null;
@@ -5027,15 +5339,54 @@ function CalendarEditModal({ item, onClose, onSaved }) {
   };
   return (
     <FullModal title="予定を編集" onClose={onClose} onSave={save} saving={saving}>
-      <Inp label="タイトル" required value={title} onChange={e=>setTitle(e.target.value)}/>
       <Sel label="種別" value={type} onChange={e=>setType(e.target.value)}>
         {Object.entries(SCHED_CATS).map(([k,v])=>(
           <option key={k} value={k}>{v.icon} {v.label}</option>
         ))}
       </Sel>
+      {type==='meeting' ? (
+        <Sel label="題材" value={mtgTopic} onChange={e=>setMtgTopic(e.target.value)}>
+          <option value="">選択してください</option>
+          {topics.map(t=><option key={t.id} value={t.name}>{t.name}</option>)}
+          {mtgTopic && !topics.find(t=>t.name===mtgTopic) && <option value={mtgTopic}>{mtgTopic}（旧）</option>}
+        </Sel>
+      ) : (
+        <Inp label="タイトル" required value={title} onChange={e=>setTitle(e.target.value)}/>
+      )}
       <Inp label="担当者（誰が実施するか）" value={assignee} onChange={e=>setAssignee(e.target.value)} placeholder="本橋 / 岩間リーダー など"/>
       <Inp label="日付" type="date" value={scheduledDate} onChange={e=>setScheduledDate(e.target.value)}/>
       <Txta label="メモ（任意）" rows={2} value={notes} onChange={e=>setNotes(e.target.value)}/>
+
+      {/* 議事録リンク */}
+      {minutesChecked && minutes.length > 0 && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2">
+          <div className="text-xs font-semibold text-emerald-700">📝 この日の記録が{minutes.length}件見つかりました</div>
+          {minutes.map(m => {
+            const what = getField(m.content,'議題')||getField(m.content,'何をした')||getField(m.content,'何を話した')||m.title;
+            const isOpen = openMinutes === m.id;
+            return (
+              <div key={m.id} className="rounded-lg border border-emerald-200 bg-white overflow-hidden">
+                <button onClick={()=>setOpenMinutes(isOpen?null:m.id)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left">
+                  <span className="text-xs shrink-0">{SCHED_CATS[m.category]?.icon||'📝'}</span>
+                  <span className="flex-1 truncate text-xs text-slate-700">{what}</span>
+                  {m.mtg_topic && <span className="text-[10px] text-slate-400 shrink-0">{m.mtg_topic}</span>}
+                  <ChevronRightIcon size={12} className={cn('text-slate-300 transition-transform', isOpen&&'rotate-90')}/>
+                </button>
+                {isOpen && (
+                  <div className="px-3 py-2 border-t border-emerald-100 bg-slate-50">
+                    <pre className="whitespace-pre-wrap font-sans text-xs text-slate-600 leading-relaxed">{m.content}</pre>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {minutesChecked && minutes.length === 0 && scheduledDate && (type==='meeting'||type==='education'||type==='interview') && (
+        <p className="text-xs text-slate-400">この日の記録ログはまだありません。</p>
+      )}
+
       <Btn variant="danger" onClick={del} className="w-full"><TrashIcon size={14}/> 削除</Btn>
     </FullModal>
   );
@@ -5060,25 +5411,30 @@ function ScheduleImport({ onClose, onSaved }) {
     try {
       let data = JSON.parse(cleaned);
       if (!Array.isArray(data)) data = [data];
-      const valid = data.filter(d=>d&&d.title);
-      if (valid.length===0){ setErr('titleを持つスケジュールが見つかりませんでした。'); return; }
+      const valid = data.filter(d=>d&&(d.title||d.mtg_topic||d.topic));
+      if (valid.length===0){ setErr('title または mtg_topic を持つスケジュールが見つかりませんでした。'); return; }
       setList(valid);
     } catch(e){ setErr('JSONとして読み取れませんでした。'); }
   };
   const doImport = async () => {
     setSaving(true);
     const validCats = Object.keys(SCHED_CATS);
-    const rows = list.map(d=>({
-      user_id: user.id,
-      title: d.title||'',
-      type: 'meeting',
-      category: validCats.includes(d.category) ? d.category : (validCats.includes(d.type) ? d.type : 'other'),
-      staff_name: d.staff_name || '',
-      assignee: d.assignee || '',
-      scheduled_date: d.scheduled_date || d.date || null,
-      status: 'todo',
-      notes: d.notes || '',
-    }));
+    const rows = list.map(d=>{
+      const cat = validCats.includes(d.category) ? d.category : (validCats.includes(d.type) ? d.type : 'other');
+      const topic = d.mtg_topic || d.topic || '';
+      return {
+        user_id: user.id,
+        title: d.title || (cat==='meeting' ? topic : ''),
+        type: 'meeting',
+        category: cat,
+        staff_name: d.staff_name || '',
+        assignee: d.assignee || '',
+        mtg_topic: cat==='meeting' ? (topic||null) : null,
+        scheduled_date: d.scheduled_date || d.date || null,
+        status: 'todo',
+        notes: d.notes || '',
+      };
+    });
     // 既存レコードと照合して重複を除外
     const { data: existing } = await sb.from('schedules').select('title,scheduled_date').eq('user_id', user.id);
     const existKeys = new Set((existing||[]).map(e => `${e.title}|${e.scheduled_date}`));
@@ -5115,7 +5471,7 @@ function ScheduleImport({ onClose, onSaved }) {
         <Btn variant="outline" size="sm" onClick={()=>fileRef.current?.click()}>📁 ファイルを選択</Btn>
       </div>
       <Txta label="スケジュール JSON" rows={8} value={json} onChange={e=>{setJson(e.target.value);setList(null);}}
-        placeholder='[ { "title": "黒田 教育", "category": "education", "scheduled_date": "2026-06-14", "assignee": "本橋", "staff_name": "黒田" } ]'/>
+        placeholder='[ { "category": "meeting", "mtg_topic": "アークス菊水", "scheduled_date": "2026-06-15", "assignee": "本橋" } ]'/>
       <Btn variant="outline" size="sm" onClick={doParse} disabled={!json.trim()}>内容を確認</Btn>
       {err && <ErrState error={err}/>}
       {list && (
@@ -5323,7 +5679,7 @@ function AppShell({ children, currentScreen, navTo }) {
     : ['searchRun','candidates','candidateDetail','searchExplore','explore'].includes(rootScreen) ? 'home'
     : ['staffDetail'].includes(rootScreen) ? 'staff'
     : ['quicklog','capture'].includes(rootScreen) ? 'home'
-    : ['kpi','calendar','review'].includes(rootScreen) ? 'home'
+    : ['kpi','calendar','review','logs'].includes(rootScreen) ? 'home'
     : rootScreen;
 
   return (
@@ -5507,6 +5863,7 @@ function App() {
       case 'kpi':            return <KpiScreen/>;
       case 'calendar':       return <CalendarScreen/>;
       case 'review':         return <ReviewScreen/>;
+      case 'logs':           return <LogScreen/>;
       case 'quicklog':       return <CaptureScreen/>;
       case 'capture':        return <CaptureScreen/>;
       case 'staff':          return <StaffScreen/>;
