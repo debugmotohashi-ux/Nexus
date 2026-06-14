@@ -4062,6 +4062,16 @@ const HUB_TYPES = {
       '（ここに実績を貼り付け）',
     ].join('\n'),
   },
+  nexuscore: {
+    label: '🧬 Nexusの核', cat: null,
+    prompt: [
+      'Nexusの核（identity / genesis）は専用JSONで取り込みます。',
+      'このタイプは nexus_genesis.json をそのまま貼り付けて取り込むためのものです。',
+      '各レコードは category が "identity" または "genesis"、content に本文、',
+      'genesis は sequence に順番を持ちます。',
+      '通常の記録（教育・面談・MTG・実績）はこのタイプを使いません。',
+    ].join('\n'),
+  },
   staff: {
     label: '👥 スタッフ', cat: null,
     prompt: [
@@ -4280,7 +4290,18 @@ function InputHub() {
     setSaving(true);
     let ok = 0;
 
-    if (picked==='staff') {
+    if (picked==='nexuscore') {
+      for (let i=0;i<list.length;i++){
+        const d=list[i]; setProgress((i+1)+' / '+list.length);
+        const ct = (d.category==='identity'||d.category==='genesis') ? d.category : null;
+        if (!ct || !d.content) continue;
+        await sb.from('nexus_core').insert({
+          user_id:user.id, core_type:ct, title:d.title||'',
+          content:d.content, sequence: (d.sequence!=null?d.sequence:null), version:1,
+        });
+        ok++;
+      }
+    } else if (picked==='staff') {
       for (let i=0;i<list.length;i++){
         const d=list[i]; setProgress((i+1)+' / '+list.length);
         if (!d.name) continue;
@@ -4437,6 +4458,164 @@ function InputHub() {
           <div className="text-sm font-semibold text-emerald-800">{done}件を登録しました</div>
           <Btn variant="outline" size="sm" onClick={reset}>続けて入力する</Btn>
         </div>
+      )}
+    </>
+  );
+}
+
+
+// ─── NEXUS CORE（核・聖域）──────────────────────────────────
+// identity（自己認識）と genesis（創世記録）を保持する聖域。
+// 普段は読み取り。意図して編集した時だけ書き換え、旧版を history へ残す。
+function NexusCoreScreen() {
+  const { sb, user } = useApp();
+  const [identity, setIdentity] = useState(null);
+  const [genesis, setGenesis] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null); // 編集中のレコード
+  const [draft, setDraft] = useState('');
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [showHistory, setShowHistory] = useState(null); // 履歴を見るcore_id
+  const [history, setHistory] = useState([]);
+  const [expanded, setExpanded] = useState({});
+
+  const load = async () => {
+    setLoading(true);
+    const { data } = await sb.from('nexus_core').select('*').eq('user_id', user.id)
+      .order('core_type').order('sequence', { nullsFirst: true });
+    const rows = data || [];
+    setIdentity(rows.find(r => r.core_type === 'identity') || null);
+    setGenesis(rows.filter(r => r.core_type === 'genesis').sort((a,b)=>(a.sequence||0)-(b.sequence||0)));
+    setLoading(false);
+  };
+  useEffect(()=>{ load(); }, []);
+
+  const startEdit = (rec) => { setEditing(rec); setDraft(rec.content); setReason(''); };
+  const cancelEdit = () => { setEditing(null); setDraft(''); setReason(''); };
+
+  const saveEdit = async () => {
+    if (!editing || draft.trim() === editing.content.trim()) { cancelEdit(); return; }
+    setSaving(true);
+    // 旧版を history へ
+    await sb.from('nexus_core_history').insert({
+      user_id: user.id, core_id: editing.id, core_type: editing.core_type,
+      title: editing.title, content: editing.content, sequence: editing.sequence,
+      version: editing.version, reason: reason || null,
+    });
+    // 本体を更新（versionを上げる）
+    await sb.from('nexus_core').update({
+      content: draft, version: (editing.version||1) + 1, updated_at: new Date().toISOString(),
+    }).eq('id', editing.id).eq('user_id', user.id);
+    setSaving(false); cancelEdit(); load();
+  };
+
+  const openHistory = async (coreId) => {
+    const { data } = await sb.from('nexus_core_history').select('*')
+      .eq('user_id', user.id).eq('core_id', coreId).order('version', { ascending: false });
+    setHistory(data || []); setShowHistory(coreId);
+  };
+
+  if (loading) return (<><PageHeader title="Nexusの核" subtitle="自己認識と創世の記録"/><LoadingState/></>);
+
+  const empty = !identity && genesis.length === 0;
+
+  return (
+    <>
+      <PageHeader title="Nexusの核" subtitle="自己認識と創世の記録 ── 聖域"/>
+
+      {empty ? (
+        <EmptyState message="核がまだ格納されていません" action={<p className="text-xs text-slate-400 mt-1">入力ハブの「Nexusの核」から取り込んでください</p>}/>
+      ) : (
+        <div className="space-y-6">
+          {/* 自己認識 */}
+          {identity && (
+            <div className="rounded-2xl border-2 border-indigo-200 bg-gradient-to-b from-indigo-50/60 to-white p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 font-mono text-sm font-bold text-white">N</div>
+                  <div>
+                    <div className="text-sm font-semibold text-indigo-900">{identity.title}</div>
+                    <div className="font-mono text-[10px] text-indigo-400">identity · version {identity.version}</div>
+                  </div>
+                </div>
+                <div className="flex gap-1.5">
+                  <button onClick={()=>openHistory(identity.id)} className="rounded-lg border border-indigo-200 px-2.5 py-1 text-[11px] text-indigo-600 hover:bg-indigo-50">履歴</button>
+                  <button onClick={()=>startEdit(identity)} className="rounded-lg border border-indigo-200 px-2.5 py-1 text-[11px] text-indigo-600 hover:bg-indigo-50">編集</button>
+                </div>
+              </div>
+              <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-800">{identity.content}</p>
+            </div>
+          )}
+
+          {/* 創世記録 */}
+          {genesis.length > 0 && (
+            <div>
+              <div className="mb-2 px-1 text-xs font-semibold text-slate-500">創世の記録 ── Nexusの生まれた対話（{genesis.length}）</div>
+              <div className="space-y-2">
+                {genesis.map(g => {
+                  const isOpen = expanded[g.id];
+                  return (
+                    <div key={g.id} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                      <button onClick={()=>setExpanded(e=>({...e,[g.id]:!e[g.id]}))}
+                        className="flex w-full items-center justify-between px-4 py-3 text-left">
+                        <span className="text-sm font-medium text-slate-700">{g.title}</span>
+                        <span className="text-slate-400 text-xs">{isOpen?'−':'+'}</span>
+                      </button>
+                      {isOpen && (
+                        <div className="px-4 pb-4">
+                          <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-600">{g.content}</p>
+                          <div className="mt-2 flex gap-1.5">
+                            <button onClick={()=>openHistory(g.id)} className="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] text-slate-500 hover:bg-slate-50">履歴 (v{g.version})</button>
+                            <button onClick={()=>startEdit(g)} className="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] text-slate-500 hover:bg-slate-50">編集</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <p className="px-1 text-center text-[11px] text-slate-400">成長しないものは、生きていない。</p>
+        </div>
+      )}
+
+      {/* 編集モーダル */}
+      {editing && (
+        <FullModal title={'核の編集 ── '+editing.title} onClose={cancelEdit} onSave={saveEdit} saveLabel="新バージョンとして保存" saving={saving}>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+            核を書き換えると、現在の内容（version {editing.version}）は履歴として残ります。定義が変わった時だけ書き換えてください。
+          </div>
+          <textarea value={draft} onChange={e=>setDraft(e.target.value)} rows={14}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[13px] leading-relaxed focus:outline-none"/>
+          <input value={reason} onChange={e=>setReason(e.target.value)}
+            placeholder="なぜ変えるのか（任意・履歴に残ります）"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none"/>
+        </FullModal>
+      )}
+
+      {/* 履歴モーダル */}
+      {showHistory && (
+        <FullModal title="変更履歴 ── 脱皮した皮" onClose={()=>setShowHistory(null)}>
+          {history.length === 0 ? (
+            <p className="text-xs text-slate-400">まだ変更履歴はありません。これが最初のバージョンです。</p>
+          ) : (
+            <div className="space-y-3">
+              {history.map(h => (
+                <div key={h.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-mono text-[10px] text-slate-400">version {h.version}</span>
+                    <span className="font-mono text-[10px] text-slate-400">{(h.archived_at||'').slice(0,10)}</span>
+                  </div>
+                  {h.reason && <div className="mb-1 text-[11px] text-slate-500">理由: {h.reason}</div>}
+                  <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-slate-600">{h.content}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </FullModal>
       )}
     </>
   );
@@ -6336,6 +6515,7 @@ function AppShell({ children, currentScreen, navTo }) {
     : ['staffDetail'].includes(rootScreen) ? 'staff'
     : ['quicklog','capture'].includes(rootScreen) ? 'home'
     : ['kpi','calendar','review','logs','inputhub'].includes(rootScreen) ? 'home'
+    : rootScreen === 'nexuscore' ? 'nexuscore'
     : rootScreen;
 
   return (
@@ -6378,6 +6558,11 @@ function AppShell({ children, currentScreen, navTo }) {
             className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
               activeNav==='kpi' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-100')}>
             <BarChartIcon size={18}/>KPI
+          </button>
+          <button onClick={()=>navTo('nexuscore')}
+            className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+              activeNav==='nexuscore' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-100')}>
+            <SparklesIcon size={18}/>Nexusの核
           </button>
           <button onClick={()=>navTo('settings')}
             className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
@@ -6520,6 +6705,7 @@ function App() {
       case 'calendar':       return <CalendarScreen/>;
       case 'review':         return <ReviewScreen/>;
       case 'logs':           return <LogScreen/>;
+      case 'nexuscore':      return <NexusCoreScreen/>;
       case 'inputhub':       return <InputHub/>;
       case 'quicklog':       return <CaptureScreen/>;
       case 'capture':        return <CaptureScreen/>;
