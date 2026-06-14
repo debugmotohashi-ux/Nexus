@@ -1316,22 +1316,23 @@ function SkillForm({ initial, categories, onClose, onSaved }) {
 function cleanJsonInput(raw) {
   let s = raw;
   s = s.trim();
-  // BOM・ゼロ幅・NBSP除去
+  // BOM・ゼロ幅・NBSP除去（これは安全なので常に行う）
   s = s.replace(/^\uFEFF/, '').replace(/[\u200B\u200C\u200D\u2060]/g, '').replace(/\u00A0/g, ' ');
-  // スマートクォート（全種類）を通常クォートに変換
-  s = s.replace(/[\u201C\u201D\u201E\u201F\u2033\u2036\uFF02]/g, '"');
-  s = s.replace(/[\u2018\u2019\u201A\u201B\u2032\u2035\uFF07]/g, "'");
   // Markdownフェンス除去
   s = s.replace(/^```(?:json)?[\s\r\n]*/i, '').replace(/[\s\r\n]*```\s*$/, '');
   s = s.trim();
-  // まず通常のパースを試みる
+  // ① まず素のままパースを試す（正常なファイルはここで返す＝中身の引用符を壊さない）
   try { JSON.parse(s); return s; } catch(e) {}
-  // 失敗した場合：JSON文字列値の中にある生の改行・タブを \n / \t に変換する
+  // ② 失敗時のみ：構造記号のスマートクォートを通常クォートに変換
+  let q = s.replace(/[\u201C\u201D\u201E\u201F\u2033\u2036\uFF02]/g, '"');
+  q = q.replace(/[\u2018\u2019\u201A\u201B\u2032\u2035\uFF07]/g, "'");
+  try { JSON.parse(q); return q; } catch(e) {}
+  // ③ それでもダメなら：文字列値の中の生の改行・タブを \n / \t に変換
   let result = '';
   let inString = false;
   let escape = false;
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i];
+  for (let i = 0; i < q.length; i++) {
+    const ch = q[i];
     if (escape) { result += ch; escape = false; continue; }
     if (ch === '\\') { result += ch; escape = true; continue; }
     if (ch === '"') { inString = !inString; result += ch; continue; }
@@ -1340,8 +1341,8 @@ function cleanJsonInput(raw) {
     if (inString && ch === '\t') { result += '\\t'; continue; }
     result += ch;
   }
-  // 変換後にパース確認。まだダメなら末尾カンマ等も除去して再挑戦
   try { JSON.parse(result); return result; } catch(e) {}
+  // ④ 最後に末尾カンマ除去
   let r2 = result.replace(/,\s*([}\]])/g, '$1');
   return r2;
 }
