@@ -592,6 +592,7 @@ function HomeScreen() {
     { key:'capture',  icon:'🎤', title:'Capture',   desc:'30秒で保存する',       screen:'capture',  tone:'indigo' },
     { key:'smartrun', icon:'⚡', title:'Smart Run',  desc:'今やるべきことを確認', action:()=>setShowSmartRun(true), tone:'amber' },
     { key:'calendar', icon:'🗓', title:'カレンダー', desc:'予定・スケジュール',    screen:'calendar', tone:'slate' },
+    { key:'review',   icon:'📊', title:'レビュー',   desc:'週次振り返り・現在地',  screen:'review',   tone:'emerald' },
     { key:'skills',   icon:'⭐', title:'Skill',       desc:'再利用テンプレート',   screen:'skills',   tone:'indigo' },
   ];
   const toneCls = {
@@ -1771,17 +1772,32 @@ function KnowledgeImport({ onClose, onSaved }) {
   };
   const doImport = async () => {
     setSaving(true);
-    const VALID_CATS = ['general','workflow','skill_memo','client','market','template','other'];
-    const rows = list.map(d=>({
-      ...(d.id?{id:d.id}:{}),
-      user_id: user.id,
-      title: d.title||'',
-      category: VALID_CATS.includes(d.category)?d.category:'general',
-      content: d.content||'',
-      tags: Array.isArray(d.tags)?d.tags:(d.tags?[d.tags]:[]),
-      source_ref: d.source_ref||'JSONインポート',
-      ...(d.staff_id?{staff_id:d.staff_id}:{}),
-    }));
+    const VALID_CATS = ['general','workflow','skill_memo','client','market','template','other','memory','goal','value','judgment_rule','anti_pattern','relationship_view','style_rule','principle','education','interview','meeting'];
+    const rows = list.map(d=>{
+      // インタビューJSONの独自フィールドをcontentに埋め込む
+      let contentVal = d.content||'';
+      const meta = [];
+      if (d.importance) meta.push('重要度:'+d.importance);
+      if (d.confidence) meta.push('確度:'+d.confidence);
+      if (Array.isArray(d.related_staff) && d.related_staff.length) meta.push('関連:'+d.related_staff.join('・'));
+      if (d.interview_date) meta.push('実施日:'+d.interview_date);
+      if (d.raw_excerpt) meta.push('原文:'+d.raw_excerpt);
+      if (d.notes) meta.push('補足:'+d.notes);
+      if (meta.length) contentVal = contentVal + '\n\n─────────────────\n' + meta.join('\n');
+      // tagsにcategoryとsourceも足す
+      let tags = Array.isArray(d.tags)?d.tags:(d.tags?[d.tags]:[]);
+      if (d.source === '本橋OSインタビュー' || d.source === '本橋OSインタビュー') tags = [...new Set([...tags, 'interview', 'motohashi_os'])];
+      return {
+        ...(d.id?{id:d.id}:{}),
+        user_id: user.id,
+        title: d.title||'',
+        category: VALID_CATS.includes(d.category)?d.category:'general',
+        content: contentVal,
+        tags,
+        source_ref: d.source||d.source_ref||'JSONインポート',
+        ...(d.staff_id?{staff_id:d.staff_id}:{}),
+      };
+    });
     // idがあれば上書き更新、なければ新規挿入
     const toUpdate = rows.filter(r=>r.id);
     const toInsert = rows.filter(r=>!r.id);
@@ -3784,6 +3800,151 @@ function DatePatchModal({ onClose }) {
 }
 
 // ─── CAPTURE BATCH IMPORT ────────────────────────────────
+// ─── REVIEW SCREEN（週次レビュー・現在地マップ）────────────
+function ReviewScreen() {
+  const { sb, user, store, fetchTable, nav } = useApp();
+  const [tab, setTab] = useState('weekly'); // weekly | location
+  const [copied, setCopied] = useState('');
+  const [days, setDays] = useState(7);
+  const [logJson, setLogJson] = useState('');
+  const [loadingLog, setLoadingLog] = useState(false);
+  // 現在地マップ
+  const [locForm, setLocForm] = useState({ heavy:'', fun:'', floating:'', condition:'', nextMonth:'' });
+  const [savingLoc, setSavingLoc] = useState(false);
+  const [savedLoc, setSavedLoc] = useState(false);
+
+  const WEEKLY_PROMPT = [
+    '今週の教育・面談ログです。本橋OSの視点で振り返ってください。',
+    '',
+    '1. 今週、繰り返し出てきたパターンは？',
+    '2. 判断基準として言語化できそうなものは？',
+    '3. 来週フォローが必要なスタッフと、その理由は？',
+    '4. 私が気づいていない傾向はあるか？',
+    '5. 今週のMVP的な良い対応と、改善すべき対応は？',
+    '',
+    '最後に、Nexusのナレッジに残すべき判断基準があれば',
+    'judgment_rule形式のJSONで出してください。',
+    '形式: [{"category":"judgment_rule","title":"","content":"","tags":[],"importance":1,"confidence":"high"}]',
+    '',
+    '─── 今週のログ ───',
+  ].join('\n');
+
+  const loadLogs = async (d) => {
+    setLoadingLog(true);
+    const from = new Date(); from.setDate(from.getDate()-d);
+    const { data } = await sb.from('knowledge_items').select('*').eq('user_id', user.id)
+      .contains('tags', ['capture']).gte('created_at', from.toISOString()).order('created_at',{ascending:false});
+    const parsed = (data||[]).map(item => {
+      const p = parseCapture(item);
+      return Object.fromEntries(Object.entries(p).filter(([,v])=>v!==undefined&&v!==''));
+    });
+    setLogJson(JSON.stringify(parsed, null, 2));
+    setLoadingLog(false);
+  };
+  useEffect(()=>{ if(tab==='weekly') loadLogs(days); }, [tab, days]);
+
+  const copyText = async (text, key) => {
+    try { await navigator.clipboard.writeText(text); setCopied(key); setTimeout(()=>setCopied(''),2000); } catch(e){}
+  };
+
+  const saveLoc = async () => {
+    setSavingLoc(true);
+    const today = localIso();
+    const month = today.slice(0,7);
+    const content = [
+      '【現在地マップ '+month+'】',
+      '',
+      '■ 実施日',
+      today,
+      '',
+      '■ 今、一番重い／頭を占めていること',
+      locForm.heavy,
+      '',
+      '■ 今、面白い／手応えを感じていること',
+      locForm.fun,
+      '',
+      '■ 今、宙に浮いている判断',
+      locForm.floating,
+      '',
+      '■ 今月のコンディション',
+      locForm.condition,
+      '',
+      '■ 来月やりたいこと',
+      locForm.nextMonth,
+    ].join('\n');
+    await sb.from('knowledge_items').insert({
+      user_id: user.id, title: '現在地マップ '+month, category: 'memory',
+      content, tags: ['capture','現在地マップ','location_map'], source_ref: '現在地マップ',
+    });
+    await fetchTable('knowledge');
+    setSavingLoc(false); setSavedLoc(true);
+    setLocForm({ heavy:'', fun:'', floating:'', condition:'', nextMonth:'' });
+    setTimeout(()=>setSavedLoc(false), 3000);
+  };
+
+  const locFields = [
+    { k:'heavy', label:'今、一番重い／頭を占めていること', ph:'例：◯◯の昇格判断、△△の育成が停滞' },
+    { k:'fun', label:'今、面白い／手応えを感じていること', ph:'例：□□の成長、新しい教育法が効いている' },
+    { k:'floating', label:'今、宙に浮いている判断', ph:'例：菊水会場の人員配置を迷っている' },
+    { k:'condition', label:'今月のコンディション', ph:'例：忙しいが充実 / 疲れている / 余裕がある' },
+    { k:'nextMonth', label:'来月やりたいこと一つ', ph:'例：◯◯の仕組み化に着手する' },
+  ];
+
+  return (
+    <>
+      <PageHeader title="レビュー" subtitle="週次レビュー・現在地マップ"/>
+
+      <div className="mb-4 flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
+        {[{k:'weekly',l:'📊 週次レビュー'},{k:'location',l:'🧭 現在地マップ'}].map(({k,l})=>(
+          <button key={k} onClick={()=>setTab(k)}
+            className={cn('flex-1 rounded-lg py-2 text-xs font-medium transition-colors',
+              tab===k?'bg-white text-indigo-700 shadow-sm':'text-slate-500')}>{l}</button>
+        ))}
+      </div>
+
+      {tab==='weekly' && (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 space-y-2">
+            <div className="text-xs font-semibold text-indigo-700">① 期間を選んでプロンプト＋ログをコピー</div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-600">直近</span>
+              {[7,14,30].map(d=>(
+                <button key={d} onClick={()=>setDays(d)}
+                  className={cn('rounded-full border px-3 py-1 text-xs font-medium',
+                    days===d?'border-indigo-600 bg-indigo-600 text-white':'border-slate-200 bg-white text-slate-600')}>{d}日</button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500">{loadingLog?'読み込み中...':'プロンプトと今週のログをまとめてコピーします。チャッピーかClaudeに貼ってください。'}</p>
+            <Btn className="w-full" onClick={()=>copyText(WEEKLY_PROMPT+'\n'+logJson, 'weekly')} disabled={loadingLog}>
+              {copied==='weekly' ? <><CheckIcon size={14}/> コピーしました</> : <><CopyIcon size={14}/> プロンプト＋ログをコピー</>}
+            </Btn>
+          </div>
+
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2">
+            <div className="text-xs font-semibold text-emerald-700">② 返ってきたJSONを取り込む</div>
+            <p className="text-xs text-slate-500">judgment_rule等のJSONが返ってきたら、ナレッジの📥 JSONから取り込めます。</p>
+            <Btn variant="outline" className="w-full" onClick={()=>nav('knowledge')}>ナレッジを開く →</Btn>
+          </div>
+        </div>
+      )}
+
+      {tab==='location' && (
+        <div className="space-y-3">
+          <p className="text-xs text-slate-500">月1回、「今の自分」を記録します。30秒で大丈夫です。</p>
+          {locFields.map(f=>(
+            <Txta key={f.k} label={f.label} rows={2} value={locForm[f.k]}
+              onChange={e=>setLocForm(v=>({...v,[f.k]:e.target.value}))} placeholder={f.ph}/>
+          ))}
+          {savedLoc && <p className="text-sm text-emerald-600 text-center">保存しました ✓</p>}
+          <Btn className="w-full" onClick={saveLoc} disabled={savingLoc || !locForm.heavy.trim()}>
+            <SaveIcon size={14}/> {savingLoc?'保存中...':'現在地マップを保存'}
+          </Btn>
+        </div>
+      )}
+    </>
+  );
+}
+
 function CaptureBatchImport({ onClose }) {
   const { sb, user, store, fetchTable } = useApp();
   const [json, setJson] = useState('');
@@ -5156,7 +5317,7 @@ function AppShell({ children, currentScreen, navTo }) {
     : ['searchRun','candidates','candidateDetail','searchExplore','explore'].includes(rootScreen) ? 'home'
     : ['staffDetail'].includes(rootScreen) ? 'staff'
     : ['quicklog','capture'].includes(rootScreen) ? 'home'
-    : ['kpi','calendar'].includes(rootScreen) ? 'home'
+    : ['kpi','calendar','review'].includes(rootScreen) ? 'home'
     : rootScreen;
 
   return (
@@ -5339,6 +5500,7 @@ function App() {
       case 'schedule':  return <ScheduleScreen/>;
       case 'kpi':            return <KpiScreen/>;
       case 'calendar':       return <CalendarScreen/>;
+      case 'review':         return <ReviewScreen/>;
       case 'quicklog':       return <CaptureScreen/>;
       case 'capture':        return <CaptureScreen/>;
       case 'staff':          return <StaffScreen/>;
