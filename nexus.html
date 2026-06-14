@@ -592,6 +592,7 @@ function HomeScreen() {
     { key:'capture',  icon:'🎤', title:'Capture',   desc:'30秒で保存する',       screen:'capture',  tone:'indigo' },
     { key:'smartrun', icon:'⚡', title:'Smart Run',  desc:'今やるべきことを確認', action:()=>setShowSmartRun(true), tone:'amber' },
     { key:'calendar', icon:'🗓', title:'カレンダー', desc:'予定・スケジュール',    screen:'calendar', tone:'slate' },
+    { key:'inputhub', icon:'⊕', title:'入力ハブ',   desc:'ここから全部入力',     screen:'inputhub', tone:'indigo' },
     { key:'logs',     icon:'📋', title:'記録ログ',   desc:'教育・面談・MTG一覧',  screen:'logs',     tone:'slate' },
     { key:'review',   icon:'📊', title:'レビュー',   desc:'週次振り返り・現在地',  screen:'review',   tone:'emerald' },
     { key:'skills',   icon:'⭐', title:'Skill',       desc:'再利用テンプレート',   screen:'skills',   tone:'indigo' },
@@ -1749,7 +1750,7 @@ function SkillsScreen() {
 
 // ─── KNOWLEDGE JSON IMPORT ───────────────────────────────
 function KnowledgeImport({ onClose, onSaved }) {
-  const { sb, user } = useApp();
+  const { sb, user, store } = useApp();
   const [json, setJson] = useState('');
   const [list, setList] = useState(null);
   const [err, setErr] = useState('');
@@ -1787,7 +1788,19 @@ function KnowledgeImport({ onClose, onSaved }) {
       if (meta.length) contentVal = contentVal + '\n\n─────────────────\n' + meta.join('\n');
       // tagsにcategoryとsourceも足す
       let tags = Array.isArray(d.tags)?d.tags:(d.tags?[d.tags]:[]);
-      if (d.source === '本橋OSインタビュー' || d.source === '本橋OSインタビュー') tags = [...new Set([...tags, 'interview', 'motohashi_os'])];
+      if (d.source === '本橋OSインタビュー') tags = [...new Set([...tags, 'interview', 'motohashi_os'])];
+      // staff_idを名前から自動解決（教育・面談）
+      let resolvedStaffId = d.staff_id || null;
+      if (!resolvedStaffId && (d.category==='education'||d.category==='interview')) {
+        // contentの「■ 誰に」からスタッフ名を取得して照合
+        const lines = (d.content||'').split('\n');
+        let who = '';
+        for (let i=0;i<lines.length;i++){ if(lines[i].includes('■ 誰に')){ who=(lines[i+1]||'').trim(); break; } }
+        if (who) {
+          const hit = (store.staff||[]).find(s => who.includes(s.name) || s.name.includes(who));
+          if (hit) resolvedStaffId = hit.id;
+        }
+      }
       return {
         ...(d.id?{id:d.id}:{}),
         user_id: user.id,
@@ -1796,7 +1809,9 @@ function KnowledgeImport({ onClose, onSaved }) {
         content: contentVal,
         tags,
         source_ref: d.source||d.source_ref||'JSONインポート',
-        ...(d.staff_id?{staff_id:d.staff_id}:{}),
+        ...(resolvedStaffId?{staff_id:resolvedStaffId}:{}),
+        ...(d.mtg_topic?{mtg_topic:d.mtg_topic}:{}),
+        ...(d.participants?{participants:d.participants}:{}),
       };
     });
     // idがあれば上書き更新、なければ新規挿入
@@ -3316,10 +3331,21 @@ function StaffDetailScreen({ id }) {
   useEffect(() => {
     if (tab === 'profile') return;
     setLogsLoading(true);
-    const cat = tab === 'education' ? 'education' : 'interview';
-    sb.from('knowledge_items').select('*').eq('user_id', user.id).eq('staff_id', id).eq('category', cat)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => { setLogs(data||[]); setLogsLoading(false); });
+    if (tab === 'meeting') {
+      // 参加したMTGを中間テーブル経由で取得
+      sb.from('mtg_participants').select('knowledge_id').eq('user_id', user.id).eq('staff_id', id)
+        .then(async ({ data }) => {
+          const ids = (data||[]).map(r=>r.knowledge_id);
+          if (ids.length === 0) { setLogs([]); setLogsLoading(false); return; }
+          const { data: ks } = await sb.from('knowledge_items').select('*').eq('user_id', user.id).in('id', ids).order('created_at',{ascending:false});
+          setLogs(ks||[]); setLogsLoading(false);
+        });
+    } else {
+      const cat = tab === 'education' ? 'education' : 'interview';
+      sb.from('knowledge_items').select('*').eq('user_id', user.id).eq('staff_id', id).eq('category', cat)
+        .order('created_at', { ascending: false })
+        .then(({ data }) => { setLogs(data||[]); setLogsLoading(false); });
+    }
   }, [tab, id, logVer]);
 
   const today = () => localIso();
@@ -3378,8 +3404,9 @@ function StaffDetailScreen({ id }) {
       <div className="mb-4 flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
         {[
           { k:'profile',   l:'プロフィール' },
-          { k:'education', l:'📚 教育記録' },
-          { k:'interview', l:'💬 面談記録' },
+          { k:'education', l:'📚 教育' },
+          { k:'interview', l:'💬 面談' },
+          { k:'meeting',   l:'🤝 MTG' },
         ].map(({k,l})=>(
           <button key={k} onClick={()=>setTab(k)}
             className={cn('flex-1 rounded-lg py-2 text-xs font-medium transition-colors',
@@ -3407,11 +3434,11 @@ function StaffDetailScreen({ id }) {
           )
       )}
 
-      {/* 教育記録 / 面談記録 */}
-      {(tab==='education' || tab==='interview') && (
+      {/* 教育・面談・MTG記録 */}
+      {(tab==='education' || tab==='interview' || tab==='meeting') && (
         logsLoading ? <LoadingState/> :
         logs.length === 0
-          ? <EmptyState message="記録がありません" action={<p className="text-xs text-slate-400 mt-1">Captureから記録を追加してください</p>}/>
+          ? <EmptyState message="記録がありません" action={<p className="text-xs text-slate-400 mt-1">{tab==='meeting'?'参加したMTGがここに表示されます':'記録ログ・入力ハブから追加してください'}</p>}/>
           : (
             <div className="space-y-2">
               {logs.map(log => {
@@ -3422,15 +3449,15 @@ function StaffDetailScreen({ id }) {
                   }
                   return null;
                 };
-                const what = getField(log.content, tab==='education'?'何をした':'何を話した');
-                const why = getField(log.content, 'なぜ');
-                const next = getField(log.content, '次どうする');
+                const what = getField(log.content, tab==='education'?'何をした':tab==='interview'?'何を話した':'議題') || log.title;
+                const why = getField(log.content, 'なぜ') || getField(log.content, '決定事項');
+                const next = getField(log.content, '次どうする') || getField(log.content, '宿題');
                 const risk = getField(log.content, 'リスク');
                 const relParts = log.content && log.content.includes('■ 関連資料') ? log.content.split('■ 関連資料') : null;
                 const related = relParts ? (relParts[1]||'').replace(/^\s+/,'').trim() || null : null;
                 return (
                   <LogAccordion key={log.id}
-                    date={log.created_at?.slice(0,10)}
+                    date={getField(log.content,'実施日') || log.created_at?.slice(0,10)}
                     what={what}
                     why={why}
                     next={next}
@@ -3439,8 +3466,9 @@ function StaffDetailScreen({ id }) {
                     urgent={log.tags?.includes('urgent')}
                     fullContent={log.content}
                     logId={log.id}
-                    staffId={id}
+                    staffId={tab==='meeting'?null:id}
                     category={tab}
+                    subtitle={tab==='meeting' ? [log.mtg_topic, log.participants].filter(Boolean).join(' / ') : null}
                     onUpdated={()=>setLogVer(v=>v+1)}
                   />
                 );
@@ -3802,6 +3830,431 @@ function DatePatchModal({ onClose }) {
 
 // ─── CAPTURE BATCH IMPORT ────────────────────────────────
 // ─── REVIEW SCREEN（週次レビュー・現在地マップ）────────────
+// ─── INPUT HUB（入力ハブ・全入力を統合）──────────────────
+const HUB_TYPES = {
+  education: {
+    label: '📚 教育ログ', cat: 'education',
+    prompt: [
+      '以下の記録をNexus取り込み用JSONに変換してください。',
+      '出力はJSON配列のみ。説明文は不要です。',
+      '',
+      '[',
+      '  {',
+      '    "title": "スタッフ名 + 内容の要約",',
+      '    "category": "education",',
+      '    "content": "下記フォーマットで整形",',
+      '    "tags": ["capture","education"]',
+      '  }',
+      ']',
+      '',
+      'contentフォーマット：',
+      '【教育ログ】',
+      '',
+      '■ 実施日',
+      'YYYY-MM-DD',
+      '',
+      '■ 誰に',
+      'スタッフ名',
+      '',
+      '■ 何をした',
+      '（実施内容）',
+      '',
+      '■ なぜ',
+      '（目的・理由）',
+      '',
+      '■ 次どうする',
+      '（次のアクション）',
+      '',
+      '─────────────────',
+      '■ 関連資料',
+      '（元の記録を省略せず全文）',
+      '',
+      'ルール：',
+      '- 日付は記録内のものをYYYY-MM-DDで抽出',
+      '- スタッフが複数なら別レコードに分ける',
+      '- ■ 誰に にスタッフ名を必ず入れる（アプリが自動で紐づけます）',
+      '- 関連資料は省略しない',
+      '- 出力はJSONのみ',
+      '',
+      '---',
+      '（ここに記録を貼り付け）',
+    ].join('\n'),
+  },
+  interview: {
+    label: '💬 面談ログ', cat: 'interview',
+    prompt: [
+      '以下の記録をNexus取り込み用JSONに変換してください。',
+      '出力はJSON配列のみ。説明文は不要です。',
+      '',
+      '[',
+      '  {',
+      '    "title": "スタッフ名 + 内容の要約",',
+      '    "category": "interview",',
+      '    "content": "下記フォーマットで整形",',
+      '    "tags": ["capture","interview"]',
+      '  }',
+      ']',
+      '',
+      'contentフォーマット：',
+      '【面談ログ】',
+      '',
+      '■ 実施日',
+      'YYYY-MM-DD',
+      '',
+      '■ 誰に',
+      'スタッフ名',
+      '',
+      '■ 何を話した',
+      '（面談内容）',
+      '',
+      '■ なぜ',
+      '（目的・背景）',
+      '',
+      '■ 次どうする',
+      '（次のアクション）',
+      '',
+      '─────────────────',
+      '■ 関連資料',
+      '（元の記録を省略せず全文）',
+      '',
+      'ルール：',
+      '- 日付は記録内のものをYYYY-MM-DDで抽出',
+      '- スタッフが複数なら別レコードに分ける',
+      '- ■ 誰に にスタッフ名を必ず入れる',
+      '- 関連資料は省略しない',
+      '- 出力はJSONのみ',
+      '',
+      '---',
+      '（ここに記録を貼り付け）',
+    ].join('\n'),
+  },
+  meeting: {
+    label: '🤝 MTGログ', cat: 'meeting',
+    prompt: [
+      '以下の議事録をNexus取り込み用JSONに変換してください。',
+      '出力はJSON配列のみ。説明文は不要です。',
+      '',
+      '[',
+      '  {',
+      '    "title": "題材 + 内容の要約",',
+      '    "category": "meeting",',
+      '    "content": "下記フォーマットで整形",',
+      '    "tags": ["capture","meeting"],',
+      '    "mtg_topic": "題材名",',
+      '    "participants": "本橋・佐藤・岩間"',
+      '  }',
+      ']',
+      '',
+      'contentフォーマット：',
+      '【MTGログ】',
+      '',
+      '■ 実施日',
+      'YYYY-MM-DD',
+      '',
+      '■ 題材',
+      '（ビッグ清田 / アークス菊水 / 全体 / 責任者 など）',
+      '',
+      '■ 参加者',
+      '（本橋・佐藤・岩間 など）',
+      '',
+      '■ 議題',
+      '（話し合った内容）',
+      '',
+      '■ 決定事項',
+      '（決まったこと）',
+      '',
+      '■ 宿題・次のアクション',
+      '（次やること）',
+      '',
+      '─────────────────',
+      '■ 関連資料',
+      '（元の議事録を省略せず全文）',
+      '',
+      'ルール：',
+      '- 日付は記録内のものをYYYY-MM-DDで抽出',
+      '- mtg_topic は既存の題材名で統一（ビッグ清田/アークス菊水/全体/責任者など）',
+      '- participants に参加者を ・ 区切りで入れる（アプリが各スタッフに紐づけます）',
+      '- 関連資料は省略しない',
+      '- 出力はJSONのみ',
+      '',
+      '---',
+      '（ここに議事録を貼り付け）',
+    ].join('\n'),
+  },
+  staff: {
+    label: '👥 スタッフ', cat: null,
+    prompt: [
+      '以下の情報をNexusスタッフ登録用JSONに変換してください。',
+      '出力はJSON配列のみ。説明文は不要です。',
+      '',
+      '[',
+      '  {',
+      '    "name": "スタッフ名",',
+      '    "role": "役職（チーフ/リーダー等、なければ空）",',
+      '    "relationship_type": "スタッフ",',
+      '    "strengths": "強み",',
+      '    "weaknesses": "課題・弱み",',
+      '    "notes": "備考・響く伝え方など"',
+      '  }',
+      ']',
+      '',
+      'ルール：',
+      '- relationship_type は スタッフ/上司/同僚/メンター/家族・パートナー/外部/その他 のいずれか',
+      '- 不明な項目は空文字',
+      '- 出力はJSONのみ',
+      '',
+      '---',
+      '（ここに情報を貼り付け）',
+    ].join('\n'),
+  },
+  schedule: {
+    label: '🗓 スケジュール', cat: null,
+    prompt: [
+      '以下の予定をNexusスケジュール登録用JSONに変換してください。',
+      '出力はJSON配列のみ。説明文は不要です。',
+      '',
+      '[',
+      '  {',
+      '    "category": "education / interview / meeting / task など",',
+      '    "scheduled_date": "YYYY-MM-DD",',
+      '    "staff_name": "教育・面談の対象スタッフ（MTG・タスクは空）",',
+      '    "mtg_topic": "MTGの題材（教育・面談・タスクは空）",',
+      '    "assignee": "担当者",',
+      '    "title": "タスク等のタイトル（教育/面談/MTGは空でよい）"',
+      '  }',
+      ']',
+      '',
+      'ルール：',
+      '- 教育・面談は staff_name を入れる（title不要）',
+      '- MTGは mtg_topic を既存の題材名で入れる（title不要）',
+      '- mtg_topic は ビッグ清田/アークス菊水/全体/責任者 などで統一',
+      '- タスク等は title を入れる',
+      '- 日付はYYYY-MM-DD',
+      '- 出力はJSONのみ',
+      '',
+      '---',
+      '（ここに予定を貼り付け）',
+    ].join('\n'),
+  },
+  interview_os: {
+    label: '🧠 インタビュー（本橋OS）', cat: null,
+    prompt: '（インタビューのJSONはチャッピーが専用プロンプトで出力します。そのJSONをそのまま下に貼り付けてください。）',
+  },
+};
+
+function InputHub() {
+  const { sb, user, store, fetchTable } = useApp();
+  const [picked, setPicked] = useState('');
+  const [json, setJson] = useState('');
+  const [list, setList] = useState(null);
+  const [mode, setMode] = useState('');
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [done, setDone] = useState(0);
+  const [promptCopied, setPromptCopied] = useState(false);
+  const fileRef = useRef(null);
+
+  const def = picked ? HUB_TYPES[picked] : null;
+
+  const reset = () => { setJson(''); setList(null); setErr(''); setDone(0); setMode(''); };
+  const pick = (k) => { setPicked(k); reset(); };
+
+  const copyPrompt = async () => {
+    if (!def) return;
+    try { await navigator.clipboard.writeText(def.prompt); setPromptCopied(true); setTimeout(()=>setPromptCopied(false),2000); } catch(e){}
+  };
+  const onFile = (e) => {
+    const f = e.target.files?.[0]; if(!f) return;
+    const r = new FileReader(); r.onload=()=>{ setJson(String(r.result||'')); setList(null); setErr(''); }; r.readAsText(f);
+  };
+
+  const doParse = () => {
+    setErr('');
+    try {
+      const data = JSON.parse(cleanJsonInput(json));
+      const arr = Array.isArray(data) ? data : [data];
+      if (arr.length === 0) { setErr('レコードが見つかりませんでした。'); return; }
+      setList(arr);
+    } catch(e){ setErr('JSONとして読み取れませんでした。'); }
+  };
+
+  const resolveStaffId = (name) => {
+    if (!name) return null;
+    const hit = (store.staff||[]).find(s => name.includes(s.name) || s.name.includes(name));
+    return hit ? hit.id : null;
+  };
+  const getWho = (content) => {
+    const lines=(content||'').split('\n');
+    for(let i=0;i<lines.length;i++){ if(lines[i].includes('■ 誰に')) return (lines[i+1]||'').trim(); }
+    return '';
+  };
+
+  const doImport = async () => {
+    if (!list) return;
+    setSaving(true);
+    let ok = 0;
+
+    if (picked==='staff') {
+      for (let i=0;i<list.length;i++){
+        const d=list[i]; setProgress((i+1)+' / '+list.length);
+        if (!d.name) continue;
+        await sb.from('staff_profiles').insert({
+          user_id:user.id, name:d.name, role:d.role||'',
+          relationship_type:d.relationship_type||'スタッフ',
+          strengths:d.strengths||'', weaknesses:d.weaknesses||'', notes:d.notes||'',
+          is_active:true,
+        });
+        ok++;
+      }
+      await fetchTable('staff');
+    } else if (picked==='schedule') {
+      const validCats = Object.keys(SCHED_CATS);
+      for (let i=0;i<list.length;i++){
+        const d=list[i]; setProgress((i+1)+' / '+list.length);
+        const cat = validCats.includes(d.category)?d.category:(validCats.includes(d.type)?d.type:'other');
+        const topic = d.mtg_topic||d.topic||'';
+        const title = d.title || (cat==='meeting'?topic:(d.staff_name?d.staff_name+(cat==='education'?' 教育':cat==='interview'?' 面談':''):''));
+        if (!title) continue;
+        await sb.from('schedules').insert({
+          user_id:user.id, title, type:'meeting', category:cat,
+          staff_name:d.staff_name||'', assignee:d.assignee||'',
+          mtg_topic: cat==='meeting'?(topic||null):null,
+          scheduled_date:d.scheduled_date||d.date||null, status:'todo', notes:d.notes||'',
+        });
+        // staff next date sync
+        if (d.staff_name && (d.scheduled_date||d.date)) {
+          const sid = resolveStaffId(d.staff_name);
+          const field = cat==='education'?'next_education_at':cat==='interview'?'next_interview_at':null;
+          if (sid && field) await sb.from('staff_profiles').update({ [field]: d.scheduled_date||d.date }).eq('id',sid).eq('user_id',user.id);
+        }
+        ok++;
+      }
+      await fetchTable('schedules');
+    } else {
+      // knowledge系（education/interview/meeting/interview_os）
+      const VALID = ['general','education','interview','meeting','memory','goal','value','judgment_rule','anti_pattern','relationship_view','style_rule','principle','workflow','skill_memo','client','market','template','other'];
+      for (let i=0;i<list.length;i++){
+        const d=list[i]; setProgress((i+1)+' / '+list.length);
+        // インタビュー独自フィールドをcontentに埋め込み
+        let contentVal = d.content||'';
+        const meta=[];
+        if (d.importance) meta.push('重要度:'+d.importance);
+        if (d.confidence) meta.push('確度:'+d.confidence);
+        if (Array.isArray(d.related_staff)&&d.related_staff.length) meta.push('関連:'+d.related_staff.join('・'));
+        if (d.interview_date) meta.push('実施日:'+d.interview_date);
+        if (d.raw_excerpt) meta.push('原文:'+d.raw_excerpt);
+        if (d.notes) meta.push('補足:'+d.notes);
+        if (meta.length) contentVal = contentVal+'\n\n─────────────────\n'+meta.join('\n');
+        let tags = Array.isArray(d.tags)?d.tags:(d.tags?[d.tags]:[]);
+        if (d.source==='本橋OSインタビュー') tags=[...new Set([...tags,'interview','motohashi_os'])];
+        // staff_id解決
+        let staffId = d.staff_id || null;
+        if (!staffId && (d.category==='education'||d.category==='interview')) staffId = resolveStaffId(getWho(d.content));
+        const row = {
+          user_id:user.id, title:d.title||'',
+          category: VALID.includes(d.category)?d.category:'general',
+          content:contentVal, tags,
+          source_ref: d.source||d.source_ref||'入力ハブ',
+        };
+        if (staffId) row.staff_id = staffId;
+        if (d.mtg_topic) row.mtg_topic = d.mtg_topic;
+        if (d.participants) row.participants = d.participants;
+        const { data: ins } = await sb.from('knowledge_items').insert(row).select('id').single();
+        // MTG参加者をスタッフに紐づけ
+        if (d.category==='meeting' && d.participants && ins) {
+          let pstr = String(d.participants);
+          ['、',',','/','／',' '].forEach(sep=>{ pstr = pstr.split(sep).join('・'); });
+          const names = pstr.split('・').map(s=>s.trim()).filter(Boolean);
+          for (const nm of names) {
+            const sid = resolveStaffId(nm);
+            if (sid) await sb.from('mtg_participants').insert({ user_id:user.id, knowledge_id:ins.id, staff_id:sid });
+          }
+        }
+        ok++;
+      }
+      await fetchTable('knowledge');
+    }
+    setProgress(''); setSaving(false); setDone(ok);
+  };
+
+  return (
+    <>
+      <PageHeader title="入力ハブ" subtitle="ここから全部入力できます"/>
+
+      {/* ① 種類選択 */}
+      <div className="mb-4">
+        <div className="text-xs font-semibold text-slate-500 mb-2">① 何を入力しますか？</div>
+        <div className="grid grid-cols-2 gap-2">
+          {Object.entries(HUB_TYPES).map(([k,v])=>(
+            <button key={k} onClick={()=>pick(k)}
+              className={cn('rounded-xl border px-3 py-2.5 text-sm font-medium text-left transition-colors',
+                picked===k?'border-indigo-500 bg-indigo-50 text-indigo-700':'border-slate-200 bg-white text-slate-600')}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {def && done===0 && (
+        <>
+          {/* ② プロンプト */}
+          {picked!=='interview_os' && (
+            <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-3 space-y-2">
+              <div className="text-xs font-semibold text-indigo-700">② プロンプトをコピーしてチャッピーに渡す</div>
+              <p className="text-xs text-slate-500">これをチャッピーに貼り、下に記録テキストを足してください。</p>
+              <Btn variant="outline" size="sm" onClick={copyPrompt}>
+                {promptCopied ? <><CheckIcon size={14}/> コピーしました</> : <><CopyIcon size={14}/> プロンプトをコピー</>}
+              </Btn>
+            </div>
+          )}
+
+          {/* ③ JSON貼り付け */}
+          <div className="mb-4 space-y-2">
+            <div className="text-xs font-semibold text-slate-500">③ 返ってきたJSONを貼り付け</div>
+            <div className="flex gap-2">
+              <input ref={fileRef} type="file" accept=".json" onChange={onFile} className="hidden"/>
+              <Btn variant="outline" size="sm" onClick={()=>fileRef.current?.click()}>📁 ファイルを選択</Btn>
+              {json && <span className="text-xs text-slate-400 self-center">{json.length.toLocaleString()}文字</span>}
+            </div>
+            <Txta label="" rows={7} value={json} onChange={e=>{setJson(e.target.value);setList(null);}}
+              placeholder='[ { ... } ]'/>
+            <Btn variant="outline" size="sm" onClick={doParse} disabled={!json.trim()}>内容を確認</Btn>
+            {err && <ErrState error={err}/>}
+          </div>
+
+          {/* ④ 確認＆取り込み */}
+          {list && (
+            <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2">
+              <div className="text-sm font-semibold text-emerald-800">{list.length}件を登録します（{def.label}）</div>
+              <div className="max-h-40 overflow-y-auto space-y-0.5">
+                {list.map((d,i)=>(
+                  <div key={i} className="text-xs text-slate-600 truncate">
+                    ・{d.title || d.name || d.mtg_topic || d.staff_name || d.scheduled_date || 'レコード'+(i+1)}
+                  </div>
+                ))}
+              </div>
+              {progress && <p className="text-xs text-indigo-500 text-center">{progress}件処理中...</p>}
+              <Btn className="w-full" onClick={doImport} disabled={saving}>
+                <SaveIcon size={14}/> {saving?'登録中...':list.length+'件を登録'}
+              </Btn>
+            </div>
+          )}
+        </>
+      )}
+
+      {done>0 && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center space-y-2">
+          <div className="text-2xl">✅</div>
+          <div className="text-sm font-semibold text-emerald-800">{done}件を登録しました</div>
+          <Btn variant="outline" size="sm" onClick={reset}>続けて入力する</Btn>
+        </div>
+      )}
+    </>
+  );
+}
+
+
 // ─── LOG SCREEN（教育・面談・MTG一覧）──────────────────────
 function LogScreen() {
   const { sb, user, store, fetchTable } = useApp();
@@ -3972,7 +4425,7 @@ function LogForm({ category, topics, onClose, onSaved, onTopicAdded }) {
     lines.push('■ '+whatLabel, what, '', '■ '+whyLabel, why, '', '■ '+nextLabel, next);
     if (related.trim()) lines.push('', '─────────────────', '■ 関連資料', related.trim());
 
-    await sb.from('knowledge_items').insert({
+    const { data: ins } = await sb.from('knowledge_items').insert({
       user_id: user.id,
       title: (isMtg ? (topic?topic+' ':'') : (staffName?staffName+' ':'')) + what.slice(0,40),
       category, content: lines.join('\n'),
@@ -3981,7 +4434,17 @@ function LogForm({ category, topics, onClose, onSaved, onTopicAdded }) {
       staff_id: staffId || null,
       mtg_topic: isMtg ? (topic||null) : null,
       participants: isMtg ? (participants||null) : null,
-    });
+    }).select('id').single();
+    // MTG参加者を各スタッフに紐づけ
+    if (isMtg && participants && ins) {
+      let pstr = participants;
+      ['、',',','/','／',' '].forEach(sep=>{ pstr = pstr.split(sep).join('・'); });
+      const names = pstr.split('・').map(s=>s.trim()).filter(Boolean);
+      for (const nm of names) {
+        const hit = (store.staff||[]).find(s => nm.includes(s.name) || s.name.includes(nm));
+        if (hit) await sb.from('mtg_participants').insert({ user_id:user.id, knowledge_id:ins.id, staff_id:hit.id });
+      }
+    }
     // スタッフ最終日更新
     if (staffId && !urgent) {
       const field = category==='education'?'last_education_at':category==='interview'?'last_interview_at':null;
@@ -5679,7 +6142,7 @@ function AppShell({ children, currentScreen, navTo }) {
     : ['searchRun','candidates','candidateDetail','searchExplore','explore'].includes(rootScreen) ? 'home'
     : ['staffDetail'].includes(rootScreen) ? 'staff'
     : ['quicklog','capture'].includes(rootScreen) ? 'home'
-    : ['kpi','calendar','review','logs'].includes(rootScreen) ? 'home'
+    : ['kpi','calendar','review','logs','inputhub'].includes(rootScreen) ? 'home'
     : rootScreen;
 
   return (
@@ -5864,6 +6327,7 @@ function App() {
       case 'calendar':       return <CalendarScreen/>;
       case 'review':         return <ReviewScreen/>;
       case 'logs':           return <LogScreen/>;
+      case 'inputhub':       return <InputHub/>;
       case 'quicklog':       return <CaptureScreen/>;
       case 'capture':        return <CaptureScreen/>;
       case 'staff':          return <StaffScreen/>;
