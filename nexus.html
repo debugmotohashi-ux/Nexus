@@ -3123,7 +3123,10 @@ function StaffForm({ initial, onClose, onSaved }) {
       last_education_at: f.last_education_at || null,
       last_interview_at: f.last_interview_at || null,
       next_education_at: f.next_education_at || null,
-      next_interview_at: f.next_interview_at || null };
+      next_interview_at: f.next_interview_at || null,
+      relationship_type: f.relationship_type || 'スタッフ',
+      is_education_target: f.is_education_target !== false,
+      is_interview_target: f.is_interview_target !== false };
     const { error } = f.id
       ? await sb.from('staff_profiles').update(payload).eq('id', f.id).eq('user_id', user.id)
       : await sb.from('staff_profiles').insert(payload);
@@ -3339,8 +3342,9 @@ function StaffDetailScreen({ id }) {
         </div>}/>
 
       <div className="mb-3 flex flex-wrap gap-2">
-        {gapBadge('教育', st.last_education_at, 14)}
-        {gapBadge('面談', st.last_interview_at, 30)}
+        {st.relationship_type && st.relationship_type !== 'スタッフ' && <Badge tone="slate">{st.relationship_type}</Badge>}
+        {st.is_education_target !== false && gapBadge('教育', st.last_education_at, 14)}
+        {st.is_interview_target !== false && gapBadge('面談', st.last_interview_at, 30)}
         {!st.is_active && <Badge tone="slate">非現役</Badge>}
       </div>
 
@@ -3454,6 +3458,9 @@ function normalizeStaff(d, userId) {
     last_interview_at: d.last_interview_at || d.last_interview || d.実施日_面談 || null,
     next_education_at: d.next_education_at || null,
     next_interview_at: d.next_interview_at || null,
+    relationship_type: d.relationship_type || 'スタッフ',
+    is_education_target: d.is_education_target !== false,
+    is_interview_target: d.is_interview_target !== false,
     is_active: d.is_active !== false,
   };
 }
@@ -3825,15 +3832,25 @@ function CaptureBatchImport({ onClose }) {
     r.readAsText(file);
   };
 
+  const [mode, setMode] = useState(''); // 'batch' | 'direct'
+
   const doParse = () => {
     setErr('');
     try {
       const cleaned = cleanJsonInput(json);
       const data = JSON.parse(cleaned);
       const arr = Array.isArray(data) ? data : [data];
-      const valid = arr.filter(d => d && d.date);
-      if (valid.length === 0) { setErr('dateを持つレコードが見つかりませんでした。'); return; }
-      setList(valid);
+      // フォーマット自動判別
+      if (arr.length > 0 && arr[0].date) {
+        // バッチ形式 {date, staff_name, category, title, related_doc}
+        const valid = arr.filter(d => d && d.date);
+        setMode('batch'); setList(valid);
+      } else if (arr.length > 0 && arr[0].title && arr[0].content) {
+        // ナレッジ直接形式 {title, category, content, tags}
+        setMode('direct'); setList(arr.filter(d => d && d.title));
+      } else {
+        setErr('対応するフォーマットが見つかりませんでした。dateフィールド or title+contentフィールドが必要です。');
+      }
     } catch(e) { setErr('JSONとして読み取れませんでした。'); }
   };
 
@@ -3843,46 +3860,45 @@ function CaptureBatchImport({ onClose }) {
     const staffMap = {};
     (store.staff || []).forEach(s => { staffMap[s.name] = s.id; });
 
-    let ok = 0;
-    for (let i = 0; i < list.length; i++) {
-      const d = list[i];
-      setProgress((i+1) + ' / ' + list.length + ' 件処理中...');
-      // staff_idを名前から解決
-      let staffId = null;
-      if (d.staff_name) {
-        for (const [name, id] of Object.entries(staffMap)) {
-          if (d.staff_name.includes(name) || name.includes(d.staff_name)) { staffId = id; break; }
-        }
-      }
-      const catMap = { education:'education', interview:'interview', meeting:'meeting', other:'general', '教育':'education', '面談':'interview', '打ち合わせ':'meeting', 'MTG':'meeting' };
-      const cat = catMap[d.category] || 'general';
-      const typeLabel = cat === 'education' ? '教育ログ' : cat === 'interview' ? '面談ログ' : 'MTGログ';
-      const contentLines = [
-        '【' + typeLabel + '】',
-        '',
-        '■ 実施日',
-        d.date || '',
-        '',
-        '■ 誰に',
-        d.staff_name || '',
-        '',
-        '■ 内容',
-        d.title || '',
-      ];
-      if (d.related_doc) {
-        contentLines.push('', '─────────────────', '■ 関連資料', d.related_doc);
-      }
-      const contentVal = contentLines.join('\n');
-      await sb.from('knowledge_items').insert({
+    if (mode === 'direct') {
+      // ナレッジ直接形式：そのまま挿入
+      const VALID_CATS = ['general','education','interview','meeting','workflow','skill_memo','client','market','template','other'];
+      const rows = list.map(d => ({
         user_id: user.id,
-        title: (d.staff_name ? d.staff_name + ' ' : '') + (d.title || '').slice(0, 40),
-        category: cat,
-        content: contentVal,
-        tags: ['capture', cat],
-        source_ref: 'バッチインポート',
-        staff_id: staffId,
-      });
-      ok++;
+        title: d.title || '',
+        category: VALID_CATS.includes(d.category) ? d.category : 'general',
+        content: d.content || '',
+        tags: Array.isArray(d.tags) ? d.tags : (d.tags ? [d.tags] : ['capture']),
+        source_ref: d.source_ref || 'バッチインポート',
+        staff_id: d.staff_id || null,
+      }));
+      for (let i = 0; i < rows.length; i++) {
+        setProgress((i+1) + ' / ' + rows.length + ' 件処理中...');
+        await sb.from('knowledge_items').insert(rows[i]);
+      }
+    } else {
+      // バッチ形式：スタッフ名解決＋content組み立て
+      for (let i = 0; i < list.length; i++) {
+        const d = list[i];
+        setProgress((i+1) + ' / ' + list.length + ' 件処理中...');
+        let staffId = null;
+        if (d.staff_name) {
+          for (const [name, id] of Object.entries(staffMap)) {
+            if (d.staff_name.includes(name) || name.includes(d.staff_name)) { staffId = id; break; }
+          }
+        }
+        const catMap = { education:'education', interview:'interview', meeting:'meeting', other:'general', '教育':'education', '面談':'interview', '打ち合わせ':'meeting', 'MTG':'meeting' };
+        const cat = catMap[d.category] || 'general';
+        const typeLabel = cat === 'education' ? '教育ログ' : cat === 'interview' ? '面談ログ' : 'MTGログ';
+        const contentLines = ['【' + typeLabel + '】', '', '■ 実施日', d.date || '', '', '■ 誰に', d.staff_name || '', '', '■ 内容', d.title || ''];
+        if (d.related_doc) contentLines.push('', '─────────────────', '■ 関連資料', d.related_doc);
+        await sb.from('knowledge_items').insert({
+          user_id: user.id,
+          title: (d.staff_name ? d.staff_name + ' ' : '') + (d.title || '').slice(0, 40),
+          category: cat, content: contentLines.join('\n'),
+          tags: ['capture', cat], source_ref: 'バッチインポート', staff_id: staffId,
+        });
+      }
     }
     await fetchTable('knowledge');
     setProgress('');
@@ -3925,15 +3941,15 @@ function CaptureBatchImport({ onClose }) {
           {list && (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-1">
               <div className="text-sm font-semibold text-emerald-800">{list.length}件を登録します</div>
+              {mode==='direct' && <p className="text-xs text-indigo-600">📚 Claudeが作成したナレッジ形式として読み込みます</p>}
               <div className="max-h-48 overflow-y-auto space-y-0.5">
                 {list.map((d,i) => {
                   const c = SCHED_CATS[d.category] || SCHED_CATS.other;
                   return (
                     <div key={i} className="flex items-center gap-2 text-xs text-slate-600">
                       <span className={cn('rounded px-1.5 py-0.5 shrink-0', c.card, c.head)}>{c.icon}</span>
-                      <span className="shrink-0 font-mono text-slate-400">{d.date}</span>
-                      {d.staff_name && <span className="shrink-0">{d.staff_name}</span>}
-                      <span className="truncate text-slate-500">{d.title}</span>
+                      {d.date && <span className="shrink-0 font-mono text-slate-400">{d.date}</span>}
+                      <span className="truncate text-slate-500">{d.staff_name ? d.staff_name + ' ' : ''}{d.title}</span>
                     </div>
                   );
                 })}
