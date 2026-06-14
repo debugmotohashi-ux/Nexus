@@ -4049,8 +4049,112 @@ const HUB_TYPES = {
   },
 };
 
+// ─── 未紐づけログ削除ツール ───────────────────────────────
+function UnlinkedCleanup({ onClose }) {
+  const { sb, user, store, fetchTable } = useApp();
+  const [cat, setCat] = useState('education');
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState({});
+  const [deleting, setDeleting] = useState(false);
+  const [done, setDone] = useState(0);
+
+  const load = async () => {
+    setLoading(true);
+    const { data } = await sb.from('knowledge_items').select('*').eq('user_id', user.id)
+      .eq('category', cat).order('created_at',{ascending:false});
+    // staff_idが空＝未紐づけ のものだけ
+    const unlinked = (data||[]).filter(k => !k.staff_id);
+    setLogs(unlinked);
+    setSelected({});
+    setLoading(false);
+  };
+  useEffect(()=>{ load(); }, [cat]);
+
+  const getWho = (c) => {
+    const lines=(c||'').split('\n');
+    for(let i=0;i<lines.length;i++){ if(lines[i].includes('■ 誰に')) return (lines[i+1]||'').trim(); }
+    return '';
+  };
+  const getDate = (c) => {
+    const lines=(c||'').split('\n');
+    for(let i=0;i<lines.length;i++){ if(lines[i].includes('■ 実施日')) return (lines[i+1]||'').trim(); }
+    return '';
+  };
+
+  const toggle = (id) => setSelected(s=>({...s,[id]:!s[id]}));
+  const selectAll = () => {
+    const all = {}; logs.forEach(l=>all[l.id]=true); setSelected(all);
+  };
+  const clearAll = () => setSelected({});
+
+  const delSelected = async () => {
+    const ids = Object.keys(selected).filter(k=>selected[k]);
+    if (ids.length === 0) return;
+    if (!confirm(ids.length+'件を削除します。元に戻せません。よろしいですか？')) return;
+    setDeleting(true);
+    for (const id of ids) {
+      await sb.from('knowledge_items').delete().eq('id', id).eq('user_id', user.id);
+    }
+    await fetchTable('knowledge');
+    setDeleting(false); setDone(ids.length);
+    load();
+  };
+
+  const selCount = Object.values(selected).filter(Boolean).length;
+
+  return (
+    <FullModal title="未紐づけログの削除" onClose={onClose}>
+      <p className="text-xs text-slate-500">スタッフに紐づいていないログだけを表示します。紐づいているものは表示されないので、誤って消すことはありません。</p>
+
+      <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
+        {[{k:'education',l:'📚 教育'},{k:'interview',l:'💬 面談'},{k:'meeting',l:'🤝 MTG'}].map(({k,l})=>(
+          <button key={k} onClick={()=>setCat(k)}
+            className={cn('flex-1 rounded-lg py-2 text-xs font-medium', cat===k?'bg-white text-indigo-700 shadow-sm':'text-slate-500')}>{l}</button>
+        ))}
+      </div>
+
+      {done>0 && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{done}件を削除しました</div>}
+
+      {loading ? <LoadingState/> : logs.length===0 ? (
+        <EmptyState message="未紐づけのログはありません"/>
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-500">未紐づけ {logs.length}件</span>
+            <div className="flex gap-2">
+              <button onClick={selectAll} className="text-xs text-indigo-600">全選択</button>
+              <button onClick={clearAll} className="text-xs text-slate-400">解除</button>
+            </div>
+          </div>
+          <div className="space-y-1 max-h-80 overflow-y-auto">
+            {logs.map(l=>(
+              <button key={l.id} onClick={()=>toggle(l.id)}
+                className={cn('w-full flex items-center gap-2 rounded-lg border px-3 py-2 text-left',
+                  selected[l.id]?'border-rose-300 bg-rose-50':'border-slate-200 bg-white')}>
+                <div className={cn('h-4 w-4 shrink-0 rounded border flex items-center justify-center',
+                  selected[l.id]?'border-rose-500 bg-rose-500':'border-slate-300')}>
+                  {selected[l.id] && <CheckIcon size={10} className="text-white"/>}
+                </div>
+                <span className="font-mono text-xs text-slate-400 shrink-0">{getDate(l.content)}</span>
+                <span className="text-xs text-slate-400 shrink-0">{getWho(l.content)||'—'}</span>
+                <span className="flex-1 truncate text-xs text-slate-600">{l.title}</span>
+                <span className="text-[10px] text-slate-300 shrink-0">{l.source_ref}</span>
+              </button>
+            ))}
+          </div>
+          <Btn variant="danger" className="w-full" onClick={delSelected} disabled={deleting||selCount===0}>
+            <TrashIcon size={14}/> {deleting?'削除中...':`選択した${selCount}件を削除`}
+          </Btn>
+        </>
+      )}
+    </FullModal>
+  );
+}
+
 function InputHub() {
   const { sb, user, store, fetchTable } = useApp();
+  const [showCleanup, setShowCleanup] = useState(false);
   const [picked, setPicked] = useState('');
   const [json, setJson] = useState('');
   const [list, setList] = useState(null);
@@ -4187,7 +4291,9 @@ function InputHub() {
 
   return (
     <>
-      <PageHeader title="入力ハブ" subtitle="ここから全部入力できます"/>
+      <PageHeader title="入力ハブ" subtitle="ここから全部入力できます"
+        action={<Btn variant="outline" size="sm" onClick={()=>setShowCleanup(true)}>🧹 重複削除</Btn>}/>
+      {showCleanup && <UnlinkedCleanup onClose={()=>setShowCleanup(false)}/>}
 
       {/* ① 種類選択 */}
       <div className="mb-4">
