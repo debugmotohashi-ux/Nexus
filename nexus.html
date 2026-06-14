@@ -572,8 +572,8 @@ function HomeScreen() {
     const daysSince = (iso) => { if (!iso) return 999; const d=new Date(iso); d.setHours(0,0,0,0); return Math.round((t-d)/86400000); };
     const daysUntilDate = (iso) => { if (!iso) return null; const d=new Date(iso); d.setHours(0,0,0,0); return Math.round((d-t)/86400000); };
     const active = (store.staff||[]).filter(s => s.is_active);
-    const needsEdu = active.filter(s => daysSince(s.last_education_at) >= 14);
-    const needsIv  = active.filter(s => daysSince(s.last_interview_at) >= 30);
+    const needsEdu = active.filter(s => s.is_education_target !== false && daysSince(s.last_education_at) >= 14);
+    const needsIv  = active.filter(s => s.is_interview_target !== false && daysSince(s.last_interview_at) >= 30);
     const edNoSched   = needsEdu.filter(s => !s.next_education_at);
     const edScheduled = needsEdu.filter(s =>  s.next_education_at);
     const ivNoSched   = needsIv.filter(s =>  !s.next_interview_at);
@@ -3145,7 +3145,7 @@ function gapBadge(label, iso, threshold) {
   return <Badge tone="emerald">{label}{n === 0 ? '本日' : n + '日前'}</Badge>;
 }
 
-const STAFF_DEFAULTS = { name:'', role:'', department:'', strengths:'', challenges:'', resonant_approach:'', ng_approach:'', goals:'', current_situation:'', notes:'', last_education_at:'', last_interview_at:'', is_active:true };
+const STAFF_DEFAULTS = { name:'', role:'', department:'', strengths:'', challenges:'', resonant_approach:'', ng_approach:'', goals:'', current_situation:'', notes:'', last_education_at:'', last_interview_at:'', is_active:true, is_education_target:true, is_interview_target:true };
 
 function StaffForm({ initial, onClose, onSaved }) {
   const { sb, user } = useApp();
@@ -3209,6 +3209,20 @@ function StaffForm({ initial, onClose, onSaved }) {
         </div>
       </div>
       <Txta label="メモ" rows={2} value={f.notes} onChange={upd('notes')}/>
+
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+        <div className="text-xs font-medium text-slate-500">フォロー対象</div>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={f.is_education_target !== false} onChange={e=>setF(v=>({...v,is_education_target:e.target.checked}))} className="h-4 w-4 rounded border-slate-300 text-indigo-600"/>
+          📚 教育の対象にする
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={f.is_interview_target !== false} onChange={e=>setF(v=>({...v,is_interview_target:e.target.checked}))} className="h-4 w-4 rounded border-slate-300 text-indigo-600"/>
+          💬 面談の対象にする
+        </label>
+        <p className="text-[11px] text-slate-400">外すとホームのフォローアラートに出なくなります（記録は残せます）。</p>
+      </div>
+
       <label className="flex items-center gap-2 text-sm text-slate-700">
         <input type="checkbox" checked={!!f.is_active} onChange={e=>setF(v=>({...v,is_active:e.target.checked}))} className="h-4 w-4 rounded border-slate-300 text-indigo-600"/>
         現役（チェックを外すと一覧の下に表示）
@@ -3685,8 +3699,8 @@ function StaffScreen() {
     const t = new Date(); t.setHours(0,0,0,0);
     const ds = (iso) => { if (!iso) return 999; const d=new Date(iso); d.setHours(0,0,0,0); return Math.round((t-d)/86400000); };
     const active = staff.filter(s => s.is_active);
-    const needsEdu = active.filter(s => ds(s.last_education_at) >= 14);
-    const needsIv  = active.filter(s => ds(s.last_interview_at) >= 30);
+    const needsEdu = active.filter(s => s.is_education_target !== false && ds(s.last_education_at) >= 14);
+    const needsIv  = active.filter(s => s.is_interview_target !== false && ds(s.last_interview_at) >= 30);
     return {
       edNoSched:   needsEdu.filter(s => !s.next_education_at),
       edScheduled: needsEdu.filter(s =>  s.next_education_at),
@@ -3739,8 +3753,8 @@ function StaffScreen() {
                   <ChevronRightIcon size={16} className="shrink-0 text-slate-300"/>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {gapBadge('教育', s.last_education_at, 14)}
-                  {gapBadge('面談', s.last_interview_at, 30)}
+                  {s.is_education_target !== false && gapBadge('教育', s.last_education_at, 14)}
+                  {s.is_interview_target !== false && gapBadge('面談', s.last_interview_at, 30)}
                 </div>
               </button>
             ))}
