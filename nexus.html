@@ -1340,7 +1340,10 @@ function cleanJsonInput(raw) {
     if (inString && ch === '\t') { result += '\\t'; continue; }
     result += ch;
   }
-  return result;
+  // 変換後にパース確認。まだダメなら末尾カンマ等も除去して再挑戦
+  try { JSON.parse(result); return result; } catch(e) {}
+  let r2 = result.replace(/,\s*([}\]])/g, '$1');
+  return r2;
 }
 function getJsonErrDetail(cleaned, err) {
   const msg = err.message || '';
