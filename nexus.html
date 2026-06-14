@@ -3807,6 +3807,7 @@ function ReviewScreen() {
   const [copied, setCopied] = useState('');
   const [days, setDays] = useState(7);
   const [logJson, setLogJson] = useState('');
+  const [logCount, setLogCount] = useState(0);
   const [loadingLog, setLoadingLog] = useState(false);
   // 現在地マップ
   const [locForm, setLocForm] = useState({ heavy:'', fun:'', floating:'', condition:'', nextMonth:'' });
@@ -3834,10 +3835,15 @@ function ReviewScreen() {
     const from = new Date(); from.setDate(from.getDate()-d);
     const { data } = await sb.from('knowledge_items').select('*').eq('user_id', user.id)
       .contains('tags', ['capture']).gte('created_at', from.toISOString()).order('created_at',{ascending:false});
-    const parsed = (data||[]).map(item => {
+    // 教育・面談・MTGのみ対象（インタビューJSON・現在地マップは除外）
+    const targetCats = ['education','interview','meeting'];
+    const filtered = (data||[]).filter(item => targetCats.includes(item.category));
+    const parsed = filtered.map(item => {
       const p = parseCapture(item);
-      return Object.fromEntries(Object.entries(p).filter(([,v])=>v!==undefined&&v!==''));
-    });
+      const obj = Object.fromEntries(Object.entries(p).filter(([,v])=>v!==undefined&&v!==''));
+      return obj;
+    }).filter(o => o.what || o.why); // 中身があるものだけ
+    setLogCount(parsed.length);
     setLogJson(JSON.stringify(parsed, null, 2));
     setLoadingLog(false);
   };
@@ -3914,7 +3920,7 @@ function ReviewScreen() {
                     days===d?'border-indigo-600 bg-indigo-600 text-white':'border-slate-200 bg-white text-slate-600')}>{d}日</button>
               ))}
             </div>
-            <p className="text-xs text-slate-500">{loadingLog?'読み込み中...':'プロンプトと今週のログをまとめてコピーします。チャッピーかClaudeに貼ってください。'}</p>
+            <p className="text-xs text-slate-500">{loadingLog?'読み込み中...':`中身のある教育・面談ログ ${logCount}件を対象にします。`}</p>
             <Btn className="w-full" onClick={()=>copyText(WEEKLY_PROMPT+'\n'+logJson, 'weekly')} disabled={loadingLog}>
               {copied==='weekly' ? <><CheckIcon size={14}/> コピーしました</> : <><CopyIcon size={14}/> プロンプト＋ログをコピー</>}
             </Btn>
