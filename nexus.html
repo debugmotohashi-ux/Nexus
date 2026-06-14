@@ -1782,7 +1782,7 @@ function KnowledgeImport({ onClose, onSaved }) {
   };
   const doImport = async () => {
     setSaving(true);
-    const VALID_CATS = ['general','workflow','skill_memo','client','market','template','other','memory','goal','value','judgment_rule','anti_pattern','relationship_view','style_rule','principle','education','interview','meeting'];
+    const VALID_CATS = ['general','workflow','skill_memo','client','market','template','other','memory','goal','value','judgment_rule','anti_pattern','relationship_view','style_rule','principle','education','interview','meeting','performance'];
     const rows = list.map(d=>{
       // インタビューJSONの独自フィールドをcontentに埋め込む
       let contentVal = d.content||'';
@@ -1808,6 +1808,12 @@ function KnowledgeImport({ onClose, onSaved }) {
           const hit = (store.staff||[]).find(s => who.includes(s.name) || s.name.includes(who));
           if (hit) resolvedStaffId = hit.id;
         }
+      }
+      if (!resolvedStaffId && d.category==='performance') {
+        const nm = d.staff_name || '';
+        let who = nm;
+        if (!who) { const lines=(d.content||'').split('\n'); for(let i=0;i<lines.length;i++){ if(lines[i].includes('■ 誰に')){ who=(lines[i+1]||'').trim(); break; } } }
+        if (who) { const hit=(store.staff||[]).find(s=>who.includes(s.name)||s.name.includes(who)); if(hit) resolvedStaffId=hit.id; }
       }
       return {
         ...(d.id?{id:d.id}:{}),
@@ -3363,7 +3369,7 @@ function StaffDetailScreen({ id }) {
           setLogs(ks||[]); setLogsLoading(false);
         });
     } else {
-      const cat = tab === 'education' ? 'education' : 'interview';
+      const cat = tab === 'education' ? 'education' : tab === 'performance' ? 'performance' : 'interview';
       sb.from('knowledge_items').select('*').eq('user_id', user.id).eq('staff_id', id).eq('category', cat)
         .order('created_at', { ascending: false })
         .then(({ data }) => { setLogs(data||[]); setLogsLoading(false); });
@@ -3429,6 +3435,7 @@ function StaffDetailScreen({ id }) {
           { k:'education', l:'📚 教育' },
           { k:'interview', l:'💬 面談' },
           { k:'meeting',   l:'🤝 MTG' },
+          { k:'performance', l:'📊 実績' },
         ].map(({k,l})=>(
           <button key={k} onClick={()=>setTab(k)}
             className={cn('flex-1 rounded-lg py-2 text-xs font-medium transition-colors',
@@ -3456,8 +3463,8 @@ function StaffDetailScreen({ id }) {
           )
       )}
 
-      {/* 教育・面談・MTG記録 */}
-      {(tab==='education' || tab==='interview' || tab==='meeting') && (
+      {/* 教育・面談・MTG・実績記録 */}
+      {(tab==='education' || tab==='interview' || tab==='meeting' || tab==='performance') && (
         logsLoading ? <LoadingState/> :
         logs.length === 0
           ? <EmptyState message="記録がありません" action={<p className="text-xs text-slate-400 mt-1">{tab==='meeting'?'参加したMTGがここに表示されます':'記録ログ・入力ハブから追加してください'}</p>}/>
@@ -3471,15 +3478,18 @@ function StaffDetailScreen({ id }) {
                   }
                   return null;
                 };
-                const what = getField(log.content, tab==='education'?'何をした':tab==='interview'?'何を話した':'議題') || log.title;
-                const why = getField(log.content, 'なぜ') || getField(log.content, '決定事項');
-                const next = getField(log.content, '次どうする') || getField(log.content, '宿題');
-                const risk = getField(log.content, 'リスク');
+                const isPerf = tab==='performance';
+                const what = isPerf
+                  ? '合計 ' + (getField(log.content,'合計')||'-') + (getField(log.content,'端末比率') ? '（端末比率 '+getField(log.content,'端末比率')+'）' : '')
+                  : (getField(log.content, tab==='education'?'何をした':tab==='interview'?'何を話した':'議題') || log.title);
+                const why = isPerf ? ('目標 ' + (getField(log.content,'目標')||'-')) : (getField(log.content, 'なぜ') || getField(log.content, '決定事項'));
+                const next = isPerf ? null : (getField(log.content, '次どうする') || getField(log.content, '宿題'));
+                const risk = isPerf ? null : getField(log.content, 'リスク');
                 const relParts = log.content && log.content.includes('■ 関連資料') ? log.content.split('■ 関連資料') : null;
                 const related = relParts ? (relParts[1]||'').replace(/^\s+/,'').trim() || null : null;
                 return (
                   <LogAccordion key={log.id}
-                    date={getField(log.content,'実施日') || log.created_at?.slice(0,10)}
+                    date={getField(log.content,'実施日') || getField(log.content,'対象月') || log.created_at?.slice(0,10)}
                     what={what}
                     why={why}
                     next={next}
@@ -4003,6 +4013,55 @@ const HUB_TYPES = {
       '（ここに議事録を貼り付け）',
     ].join('\n'),
   },
+  performance: {
+    label: '📊 実績ログ', cat: 'performance',
+    prompt: [
+      '以下の月次実績をNexus取り込み用JSONに変換してください。',
+      '出力はJSON配列のみ。説明文は不要です。',
+      '',
+      '[',
+      '  {',
+      '    "title": "スタッフ名 + YYYY年M月実績",',
+      '    "category": "performance",',
+      '    "content": "下記フォーマットで整形",',
+      '    "tags": ["capture","performance"],',
+      '    "staff_name": "スタッフ名"',
+      '  }',
+      ']',
+      '',
+      'contentフォーマット：',
+      '【実績ログ】',
+      '',
+      '■ 対象月',
+      'YYYY-MM',
+      '',
+      '■ 誰に',
+      'スタッフ名',
+      '',
+      '■ 目標',
+      'XX件',
+      '',
+      '■ 合計',
+      'XX件',
+      '',
+      '■ 端末比率',
+      'XX%（あれば）',
+      '',
+      '■ 内訳',
+      'U18・O60新規 端末付きX件／SIMのみX件',
+      'MNP 端末付きX件／SIM単X件',
+      'セルアップ X件',
+      '',
+      'ルール：',
+      '- スタッフごとに別レコードに分ける',
+      '- staff_name と ■ 誰に にスタッフ名を必ず入れる（アプリが自動で紐づけます）',
+      '- 月末確定分のみ。端末付き/SIM単の分割が無ければ合計件数だけでよい',
+      '- 出力はJSONのみ',
+      '',
+      '---',
+      '（ここに実績を貼り付け）',
+    ].join('\n'),
+  },
   staff: {
     label: '👥 スタッフ', cat: null,
     prompt: [
@@ -4259,7 +4318,7 @@ function InputHub() {
       await fetchTable('schedules');
     } else {
       // knowledge系（education/interview/meeting/interview_os）
-      const VALID = ['general','education','interview','meeting','memory','goal','value','judgment_rule','anti_pattern','relationship_view','style_rule','principle','workflow','skill_memo','client','market','template','other'];
+      const VALID = ['general','education','interview','meeting','performance','memory','goal','value','judgment_rule','anti_pattern','relationship_view','style_rule','principle','workflow','skill_memo','client','market','template','other'];
       for (let i=0;i<list.length;i++){
         const d=list[i]; setProgress((i+1)+' / '+list.length);
         // インタビュー独自フィールドをcontentに埋め込み
@@ -4277,6 +4336,7 @@ function InputHub() {
         // staff_id解決
         let staffId = d.staff_id || null;
         if (!staffId && (d.category==='education'||d.category==='interview')) staffId = resolveStaffId(getWho(d.content));
+        if (!staffId && d.category==='performance') staffId = resolveStaffId(d.staff_name || getWho(d.content));
         const row = {
           user_id:user.id, title:d.title||'',
           category: VALID.includes(d.category)?d.category:'general',
@@ -4416,6 +4476,7 @@ function LogScreen() {
     const lines = c.split('\n');
     for (let i=0;i<lines.length;i++){
       if (lines[i].includes('■ 実施日')) return (lines[i+1]||'').trim();
+      if (lines[i].includes('■ 対象月')) return (lines[i+1]||'').trim();
       if (lines[i].startsWith('【Capture Raw】実施日：')) return lines[i].split('実施日：')[1]?.slice(0,10);
     }
     return (item.created_at||'').slice(0,10);
@@ -4443,6 +4504,7 @@ function LogScreen() {
     { k:'education', l:'📚 教育' },
     { k:'interview', l:'💬 面談' },
     { k:'meeting', l:'🤝 MTG' },
+    { k:'performance', l:'📊 実績' },
   ];
 
   return (
@@ -4489,9 +4551,12 @@ function LogScreen() {
           : (
             <div className="space-y-2">
               {filtered.map(log => {
-                const what = getField(log.content, tab==='education'?'何をした':tab==='interview'?'何を話した':'議題');
-                const why = getField(log.content, 'なぜ') || getField(log.content, '決定事項');
-                const next = getField(log.content, '次どうする') || getField(log.content, '宿題');
+                const isPerf = tab==='performance';
+                const what = isPerf
+                  ? '合計 ' + (getField(log.content,'合計')||'-') + (getField(log.content,'端末比率') ? '（端末比率 '+getField(log.content,'端末比率')+'）' : '')
+                  : getField(log.content, tab==='education'?'何をした':tab==='interview'?'何を話した':'議題');
+                const why = isPerf ? ('目標 ' + (getField(log.content,'目標')||'-')) : (getField(log.content, 'なぜ') || getField(log.content, '決定事項'));
+                const next = isPerf ? null : (getField(log.content, '次どうする') || getField(log.content, '宿題'));
                 const relParts = log.content && log.content.includes('■ 関連資料') ? log.content.split('■ 関連資料') : null;
                 const related = relParts ? (relParts[1]||'').replace(/^\s+/,'').trim() || null : null;
                 return (
