@@ -39,9 +39,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js
-"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body { overscroll-behavior: none; -webkit-overflow-scrolling: touch; background-color: #f8fafc; }
@@ -4379,9 +4378,28 @@ function InputHub() {
             if (sid) await sb.from('mtg_participants').insert({ user_id:user.id, knowledge_id:ins.id, staff_id:sid });
           }
         }
+        // スタッフの最終教育日／最終面談日を更新（education / interview のみ）
+        if (staffId && (d.category==='education' || d.category==='interview')) {
+          const field = d.category==='education' ? 'last_education_at' : 'last_interview_at';
+          // contentの「■ 実施日」から日付を抽出（なければ今日）
+          let edate = null;
+          const clines = String(contentVal||'').split('\n');
+          for (let j=0;j<clines.length;j++){
+            if (clines[j].includes('■ 実施日')) { edate = (clines[j+1]||'').trim().slice(0,10) || null; break; }
+          }
+          if (!edate && d.interview_date) edate = String(d.interview_date).slice(0,10);
+          if (!edate) edate = localIso().slice(0,10);
+          // 既存の最終日より新しい場合のみ更新（古い記録の取り込みで上書きしない）
+          const cur = (store.staff||[]).find(s => s.id===staffId);
+          const prev = cur ? cur[field] : null;
+          if (!prev || edate >= prev) {
+            await sb.from('staff_profiles').update({ [field]: edate }).eq('id', staffId).eq('user_id', user.id);
+          }
+        }
         ok++;
       }
       await fetchTable('knowledge');
+      await fetchTable('staff');
     }
     setProgress(''); setSaving(false); setDone(ok);
   };
