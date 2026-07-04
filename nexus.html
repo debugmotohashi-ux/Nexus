@@ -39,7 +39,6 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -53,7 +52,7 @@
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen">
 <div id="root"></div>
-<script type="text/babel">
+<script type="text/plain" id="nexus-src">
 const {
   useState, useEffect, useCallback, useMemo,
   createContext, useContext, useRef
@@ -7103,6 +7102,40 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+  <script>
+  // ─── 起動高速化ローダー ───
+  // 初回: Babelを動的ロード→コンパイル→結果を端末に保存
+  // 2回目以降: 保存済みコードを即実行（Babelのダウンロードもコンパイルも完全スキップ）
+  // HTML更新時: ソースが変わる→自動で再コンパイル＆キャッシュ更新
+  (function(){
+    var srcEl = document.getElementById('nexus-src');
+    var src = srcEl ? (srcEl.textContent || '') : '';
+    if (!src) return;
+    function fnv(s){ var h = 0x811c9dc5; for (var i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16); }
+    var stamp = fnv(src) + ':' + src.length;
+    var KEY = 'nexus_jsx_cache', KEYH = 'nexus_jsx_cache_h';
+    function run(code){ var s = document.createElement('script'); s.textContent = code; document.body.appendChild(s); }
+    var cached = null;
+    try { if (localStorage.getItem(KEYH) === stamp) cached = localStorage.getItem(KEY); } catch(e){}
+    if (cached) { run(cached); return; }
+    var b = document.createElement('script');
+    b.src = 'https://unpkg.com/@babel/standalone@7.24.0/babel.min.js';
+    b.onload = function(){
+      try {
+        var out = Babel.transform(src, { presets: ['react'] }).code;
+        try { localStorage.setItem(KEY, out); localStorage.setItem(KEYH, stamp); }
+        catch(e){ try { localStorage.removeItem(KEY); localStorage.removeItem(KEYH); } catch(_e){} }
+        run(out);
+      } catch(err) {
+        document.body.innerHTML = '<div style="padding:24px;font-family:sans-serif;color:#b91c1c">起動エラー: ' + ((err && err.message) || err) + '</div>';
+      }
+    };
+    b.onerror = function(){
+      document.body.innerHTML = '<div style="padding:24px;font-family:sans-serif;color:#b91c1c">読み込みエラー：ネットワークを確認して再読み込みしてください</div>';
+    };
+    document.head.appendChild(b);
+  })();
   </script>
 </body>
 </html>
