@@ -46,12 +46,21 @@
     }
   </script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: { indigo: {
+      50:'#EBF5FF',100:'#D6EBFF',200:'#ADD6FF',300:'#7ABFFF',400:'#3D9BFF',
+      500:'#007AFF',600:'#0071EB',700:'#005FC7',800:'#004C9E',900:'#003B7A'
+    } } } } };
+  </script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    body { overscroll-behavior: none; -webkit-overflow-scrolling: touch; background-color: #f8fafc; }
+    body { overscroll-behavior: none; -webkit-overflow-scrolling: touch; background-color: #F2F2F7; font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif; }
+    .ios-blur { -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); background: rgba(255,255,255,.72); }
+    button { transition: transform .08s ease-out, opacity .08s ease-out; }
+    button:not(:disabled):active { transform: scale(.97); opacity: .8; }
     .safe-pb { padding-bottom: env(safe-area-inset-bottom, 8px); }
     .safe-pt { padding-top: env(safe-area-inset-top, 0px); }
     /* Safe area top spacer for mobile PWA */
@@ -59,7 +68,7 @@
     textarea, input, select { font-size: 16px !important; } /* iOS zoom 防止 */
   </style>
 </head>
-<body class="bg-slate-50 text-slate-900 min-h-screen">
+<body class="bg-[#F2F2F7] text-slate-900 min-h-screen">
 <div id="root"></div>
 <script type="text/plain" id="nexus-src">
 const {
@@ -324,7 +333,7 @@ function PageHeader({ title, subtitle, action, onBack }) {
           </button>
         )}
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight truncate">{title}</h1>
+          <h1 className="text-[28px] leading-[34px] font-bold tracking-tight truncate">{title}</h1>
           {subtitle && <p className="mt-0.5 text-xs text-slate-500 truncate">{subtitle}</p>}
         </div>
       </div>
@@ -6913,7 +6922,7 @@ function AppShell({ children, currentScreen, navTo }) {
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       {/* Mobile safe area top fill */}
-      <div className="fixed inset-x-0 top-0 z-[200] mobile-safe-top bg-slate-50 md:hidden"/>
+      <div className="fixed inset-x-0 top-0 z-[200] mobile-safe-top bg-[#F2F2F7] md:hidden"/>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex md:w-56 md:flex-col md:fixed md:inset-y-0 border-r border-slate-200 bg-white">
         <div className="flex h-16 items-center gap-2 px-5 border-b border-slate-100 safe-pt md:safe-pt">
@@ -6973,7 +6982,7 @@ function AppShell({ children, currentScreen, navTo }) {
       </div>
 
       {/* Mobile bottom nav */}
-      <nav className="fixed bottom-0 inset-x-0 z-30 md:hidden bg-white/95 backdrop-blur border-t border-slate-200 safe-pb">
+      <nav className="fixed bottom-0 inset-x-0 z-30 md:hidden ios-blur border-t border-slate-200/60 safe-pb">
         <div className="flex">
           {NAV_ITEMS.map(({screen,label,Icon})=>(
             <button key={screen} onClick={()=>navTo(screen)}
