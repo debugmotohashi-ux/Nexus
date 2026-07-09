@@ -4715,7 +4715,7 @@ function InputHub() {
         const title = d.title || (cat==='meeting'?topic:(d.staff_name?d.staff_name+(cat==='education'?' 教育':cat==='interview'?' 面談':''):''));
         if (!title) continue;
         await sb.from('schedules').insert({
-          user_id:user.id, title, type:'meeting', category:cat,
+          user_id:user.id, title, type:cat, category:cat,
           staff_name:d.staff_name||'', assignee:d.assignee||'',
           mtg_topic: cat==='meeting'?(topic||null):null,
           scheduled_date:d.scheduled_date||d.date||null, status:'todo', notes:d.notes||'',
