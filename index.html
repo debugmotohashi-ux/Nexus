@@ -1384,6 +1384,243 @@
       .nx8-modules, .nx8-timeline { gap:6px; }
     }
 
+  
+    /* ─── NEXUS v9 FULL-SYSTEM POLISH ─── */
+    .nexus-command {
+      background:
+        radial-gradient(circle at 50% -10%, rgba(56,189,248,.11), transparent 30%),
+        radial-gradient(circle at 100% 18%, rgba(14,165,233,.05), transparent 34%),
+        linear-gradient(180deg, #03050b 0%, #010205 58%, #000 100%) !important;
+    }
+    .nexus-command::before {
+      opacity:.18 !important;
+      background-size:56px 56px !important;
+    }
+
+    .nx9-page-header {
+      margin-bottom: 22px;
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:14px;
+    }
+    .nx9-page-title-wrap {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width:0;
+    }
+    .nx9-page-title {
+      color:#f8fbff;
+      font-size:30px;
+      line-height:1.08;
+      font-weight:650;
+      letter-spacing:-.035em;
+      text-shadow:0 0 18px rgba(56,189,248,.07);
+    }
+    .nx9-page-subtitle {
+      margin-top:6px;
+      color:rgba(203,213,225,.56);
+      font-size:11px;
+      line-height:1.35;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+    .nx9-back {
+      display:grid;
+      place-items:center;
+      flex:0 0 auto;
+      width:38px; height:38px;
+      border-radius:14px;
+      border:1px solid rgba(125,211,252,.14);
+      background:rgba(5,12,24,.68);
+      color:#94a3b8;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .nx9-section-title {
+      margin-bottom:12px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .nx9-section-title::after {
+      content:'';
+      flex:1;
+      height:1px;
+      background:linear-gradient(90deg,rgba(125,211,252,.18),transparent);
+    }
+    .nx9-section-label {
+      color:rgba(226,232,240,.86);
+      font-size:12px;
+      font-weight:650;
+      letter-spacing:.05em;
+    }
+    .nx9-section-count {
+      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+      color:rgba(125,211,252,.62);
+      font-size:10px;
+    }
+
+    .nx9-empty {
+      border-radius:22px;
+      border:1px dashed rgba(125,211,252,.18);
+      background:linear-gradient(145deg,rgba(8,14,28,.70),rgba(3,8,18,.82));
+      padding:54px 20px;
+      text-align:center;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
+    }
+    .nx9-error {
+      border-radius:16px;
+      border:1px solid rgba(251,113,133,.18);
+      background:linear-gradient(145deg,rgba(45,12,25,.56),rgba(5,8,18,.88));
+      padding:14px 16px;
+      color:#fda4af;
+      font-size:13px;
+    }
+
+    .nx9-modal {
+      background:
+        radial-gradient(circle at 50% -10%,rgba(56,189,248,.12),transparent 30%),
+        linear-gradient(180deg,#03050b,#010205) !important;
+      color:#eaf3ff;
+    }
+    .nx9-modal-header {
+      border-bottom:1px solid rgba(125,211,252,.12);
+      background:rgba(3,7,15,.94);
+      box-shadow:0 1px 0 rgba(255,255,255,.03) inset;
+      -webkit-backdrop-filter:blur(18px);
+      backdrop-filter:blur(18px);
+    }
+    .nx9-modal-title {
+      color:#edf7ff;
+      font-size:13px;
+      font-weight:650;
+      letter-spacing:.12em;
+      text-transform:uppercase;
+    }
+
+    .nexus-command .rounded-xl.border.bg-white,
+    .nexus-command .rounded-2xl.border.bg-white,
+    .nexus-command .rounded-lg.border.bg-white,
+    .nexus-command .rounded-xl.border[class*="bg-white"],
+    .nexus-command .rounded-2xl.border[class*="bg-white"] {
+      border-color:rgba(148,163,184,.13) !important;
+      background:
+        linear-gradient(145deg,rgba(9,16,30,.88),rgba(3,8,18,.92)) !important;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.035),
+        0 12px 30px rgba(0,0,0,.12) !important;
+    }
+    .nexus-command [class*="bg-indigo-50"],
+    .nexus-command [class*="bg-emerald-50"],
+    .nexus-command [class*="bg-amber-50"],
+    .nexus-command [class*="bg-rose-50"],
+    .nexus-command [class*="bg-slate-50"] {
+      background:
+        linear-gradient(145deg,rgba(8,15,29,.90),rgba(3,8,18,.92)) !important;
+    }
+    .nexus-command [class*="border-indigo-"],
+    .nexus-command [class*="border-emerald-"],
+    .nexus-command [class*="border-amber-"],
+    .nexus-command [class*="border-slate-"] {
+      border-color:rgba(125,211,252,.15) !important;
+    }
+    .nexus-command [class*="text-indigo-"],
+    .nexus-command [class*="text-emerald-"],
+    .nexus-command [class*="text-blue-"] {
+      color:#7dd3fc !important;
+    }
+    .nexus-command [class*="text-amber-"] {
+      color:#f8d38b !important;
+    }
+    .nexus-command [class*="text-rose-"] {
+      color:#fda4af !important;
+    }
+
+    .nx9-segment {
+      border-color:rgba(148,163,184,.12) !important;
+      background:rgba(5,11,22,.70) !important;
+      padding:4px !important;
+      border-radius:16px !important;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
+    }
+    .nx9-segment button {
+      border-radius:12px !important;
+    }
+
+    .nx9-bottom-nav {
+      background:rgba(2,5,11,.88) !important;
+      border-color:rgba(125,211,252,.10) !important;
+      -webkit-backdrop-filter:blur(24px) saturate(145%) !important;
+      backdrop-filter:blur(24px) saturate(145%) !important;
+      box-shadow:0 -18px 50px rgba(0,0,0,.42);
+    }
+    .nx9-bottom-item {
+      position:relative;
+      min-height:58px;
+    }
+    .nx9-bottom-item.active {
+      color:#7dd3fc !important;
+    }
+    .nx9-bottom-item.active::before {
+      content:'';
+      position:absolute;
+      top:0;
+      left:50%;
+      width:28px;
+      height:2px;
+      transform:translateX(-50%);
+      border-radius:999px;
+      background:#7dd3fc;
+      box-shadow:0 0 14px rgba(56,189,248,.54);
+    }
+    .nx9-side {
+      background:rgba(2,6,15,.88) !important;
+      border-color:rgba(125,211,252,.10) !important;
+      -webkit-backdrop-filter:blur(24px) saturate(145%);
+      backdrop-filter:blur(24px) saturate(145%);
+    }
+    .nx9-side-item.active {
+      border-color:rgba(125,211,252,.18) !important;
+      background:linear-gradient(90deg,rgba(14,165,233,.12),rgba(14,165,233,.03)) !important;
+      color:#7dd3fc !important;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
+    }
+
+    .nx9-calendar-day {
+      border-color:rgba(148,163,184,.12) !important;
+      background:linear-gradient(145deg,rgba(8,15,29,.78),rgba(3,8,18,.82)) !important;
+    }
+    .nx9-calendar-day.today {
+      border-color:rgba(125,211,252,.34) !important;
+      background:
+        radial-gradient(circle at 80% 10%,rgba(56,189,248,.10),transparent 34%),
+        linear-gradient(145deg,rgba(10,21,38,.88),rgba(3,8,18,.88)) !important;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 0 20px rgba(56,189,248,.06);
+    }
+    .nx9-event {
+      border:1px solid rgba(125,211,252,.12);
+      background:rgba(8,18,34,.82) !important;
+      color:rgba(226,232,240,.84) !important;
+      border-radius:10px !important;
+    }
+
+    .nexus-command input,
+    .nexus-command textarea,
+    .nexus-command select {
+      border-radius:14px !important;
+      border-color:rgba(125,211,252,.18) !important;
+      background:rgba(3,9,20,.92) !important;
+      color:#edf7ff !important;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.025) !important;
+    }
+    .nexus-command input:focus,
+    .nexus-command textarea:focus,
+    .nexus-command select:focus {
+      border-color:rgba(125,211,252,.44) !important;
+      box-shadow:0 0 0 3px rgba(56,189,248,.08),inset 0 1px 0 rgba(255,255,255,.03) !important;
+    }
+
   </style>
 </head>
 <body class="bg-[#F2F2F7] text-slate-900 min-h-screen">
@@ -1580,15 +1817,15 @@ const UsersIcon = ({size, className}) => <SvgIcon size={size} className={classNa
 
 // ─── SHARED UI COMPONENTS ─────────────────────────────────
 function Btn({ children, variant='primary', size='md', onClick, disabled, type='button', className='' }) {
-  const base = 'inline-flex items-center justify-center gap-1.5 font-medium rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
+  const base = 'inline-flex items-center justify-center gap-1.5 font-semibold rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed';
   const variants = {
-    primary: 'bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800',
-    secondary: 'bg-slate-100 text-slate-700 hover:bg-slate-200 active:bg-slate-300',
-    ghost: 'text-slate-600 hover:bg-slate-100 active:bg-slate-200',
-    danger: 'bg-rose-50 text-rose-600 hover:bg-rose-100 active:bg-rose-200',
-    outline: 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+    primary: 'border border-sky-300/25 bg-sky-400/15 text-sky-100 hover:bg-sky-400/20 active:bg-sky-400/25 shadow-[inset_0_1px_0_rgba(255,255,255,.05),0_0_18px_rgba(56,189,248,.06)]',
+    secondary: 'border border-slate-500/15 bg-slate-900/70 text-slate-200 hover:bg-slate-800/80 active:bg-slate-800',
+    ghost: 'text-slate-300 hover:bg-slate-800/60 active:bg-slate-800/80',
+    danger: 'border border-rose-400/20 bg-rose-500/10 text-rose-200 hover:bg-rose-500/15',
+    outline: 'border border-sky-300/18 bg-slate-950/60 text-slate-200 hover:border-sky-300/30 hover:bg-sky-400/5',
   };
-  const sizes = { sm: 'px-2.5 py-1.5 text-xs', md: 'px-4 py-2 text-sm', lg: 'px-5 py-2.5 text-base' };
+  const sizes = { sm: 'px-3 py-1.5 text-xs', md: 'px-4 py-2.5 text-sm', lg: 'px-5 py-3 text-base' };
   return (
     <button type={type} onClick={onClick} disabled={disabled}
       className={cn(base, variants[variant], sizes[size], className)}>
@@ -1644,16 +1881,16 @@ function StatusBadge({ status }) {
 
 function PageHeader({ title, subtitle, action, onBack }) {
   return (
-    <div className="mb-5 flex items-end justify-between gap-3">
-      <div className="flex items-center gap-2 min-w-0">
+    <div className="nx9-page-header">
+      <div className="nx9-page-title-wrap">
         {onBack && (
-          <button onClick={onBack} className="shrink-0 text-slate-400 hover:text-slate-600 p-1 -ml-1">
-            <ArrowLeftIcon size={20}/>
+          <button onClick={onBack} className="nx9-back">
+            <ArrowLeftIcon size={18}/>
           </button>
         )}
         <div className="min-w-0">
-          <h1 className="text-[28px] leading-[34px] font-bold tracking-tight truncate">{title}</h1>
-          {subtitle && <p className="mt-0.5 text-xs text-slate-500 truncate">{subtitle}</p>}
+          <h1 className="nx9-page-title truncate">{title}</h1>
+          {subtitle && <p className="nx9-page-subtitle truncate">{subtitle}</p>}
         </div>
       </div>
       {action && <div className="shrink-0">{action}</div>}
@@ -1663,46 +1900,46 @@ function PageHeader({ title, subtitle, action, onBack }) {
 
 function SectionTitle({ children, count }) {
   return (
-    <div className="mb-3 flex items-center gap-2">
-      <h2 className="text-sm font-semibold text-slate-700">{children}</h2>
-      {typeof count === 'number' && <span className="font-mono text-xs text-slate-400">{count}</span>}
+    <div className="nx9-section-title">
+      <h2 className="nx9-section-label">{children}</h2>
+      {typeof count === 'number' && <span className="nx9-section-count">{count}</span>}
     </div>
   );
 }
 
 function LoadingState() {
-  return (
-    <div className="py-16 text-center text-sm text-slate-400">Loading...</div>
-  );
+  return <div className="py-16 text-center text-xs tracking-[.16em] text-slate-500">LOADING NEXUS…</div>;
 }
+
 function EmptyState({ message, action }) {
   return (
-    <div className="rounded-xl border border-dashed border-slate-300 bg-white py-14 text-center">
+    <div className="nx9-empty">
       <p className="text-sm text-slate-400">{message}</p>
-      {action && <div className="mt-3">{action}</div>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }
+
 function ErrState({ error }) {
-  return <div className="rounded-lg bg-rose-50 p-4 text-sm text-rose-600">{error}</div>;
+  return <div className="nx9-error">{error}</div>;
 }
 
 function FullModal({ title, onClose, onSave, saveLabel='Save', saving, children }) {
   return (
-    <div className="nx-modal fixed inset-0 z-50 flex flex-col safe-pt">
-      <div className="nx-modal-header flex items-center justify-between px-4 py-3">
+    <div className="nx9-modal fixed inset-0 z-50 flex flex-col safe-pt">
+      <div className="nx9-modal-header flex items-center justify-between px-4 py-3.5">
         <button onClick={onClose} className="flex items-center gap-1 text-sm font-medium text-slate-300 hover:text-sky-200">
           <ArrowLeftIcon size={18}/> Close
         </button>
-        <h2 className="nx-metal-text max-w-[60%] truncate text-sm font-semibold tracking-[.08em]">{title}</h2>
+        <h2 className="nx9-modal-title max-w-[58%] truncate">{title}</h2>
         {onSave && (
           <button onClick={onSave} disabled={saving} className="text-sm font-semibold text-sky-300 disabled:opacity-40">
-            {saving ? 'Saving…' : (saveLabel)}
+            {saving ? 'Saving…' : saveLabel}
           </button>
         )}
         {!onSave && <div className="w-14"/>}
       </div>
-      <div className="flex-1 overflow-y-auto px-4 pb-10 pt-5 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 pb-12 pt-5 space-y-4">
         {children}
       </div>
     </div>
@@ -3573,7 +3810,7 @@ function ScheduleScreen() {
         {[{k:'todo',l:'未完了'},{k:'done',l:'完了'},{k:'all',l:'すべて'}].map(({k,l})=>(
           <button key={k} onClick={()=>setFilter(k)}
             className={cn('rounded-full border px-3 py-1 text-sm font-medium',
-              filter===k?'border-indigo-600 bg-indigo-600 text-white':'border-slate-200 bg-white text-slate-600')}>
+              filter===k?'border-sky-300/30 bg-sky-400/15 text-sky-100':'border-slate-500/15 bg-slate-950/50 text-slate-400')}>
             {l}
           </button>
         ))}
@@ -4887,7 +5124,7 @@ function StaffDetailScreen({ id }) {
       </div>
 
       {/* タブ */}
-      <div className="mb-4 flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
+      <div className="nx9-segment mb-4 flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
         {[
           { k:'profile',   l:'プロフィール' },
           { k:'education', l:'📚 教育' },
@@ -4897,7 +5134,7 @@ function StaffDetailScreen({ id }) {
         ].map(({k,l})=>(
           <button key={k} onClick={()=>setTab(k)}
             className={cn('flex-1 rounded-lg py-2 text-xs font-medium transition-colors',
-              tab===k?'bg-white text-indigo-700 shadow-sm':'text-slate-500')}>
+              tab===k?'bg-sky-400/15 text-sky-200 shadow-[inset_0_0_0_1px_rgba(125,211,252,.18)]':'text-slate-400')}>
             {l}
           </button>
         ))}
@@ -5637,7 +5874,7 @@ function EchoScreen() {
           {Object.entries(ECHO_FORMATS).map(([k,v])=>(
             <button key={k} onClick={()=>setFmt(k)}
               className={cn('rounded-xl border px-2 py-2.5 text-xs font-medium transition-colors',
-                fmt===k?'border-emerald-500 bg-emerald-50 text-emerald-700':'border-slate-200 bg-white text-slate-600')}>
+                fmt===k?'border-sky-300/30 bg-sky-400/15 text-sky-100':'border-slate-500/15 bg-slate-950/50 text-slate-400')}>
               {v.label}
             </button>
           ))}
@@ -6038,7 +6275,7 @@ function UnlinkedCleanup({ onClose }) {
       <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
         {[{k:'education',l:'📚 教育'},{k:'interview',l:'💬 面談'},{k:'meeting',l:'🤝 MTG'}].map(({k,l})=>(
           <button key={k} onClick={()=>setCat(k)}
-            className={cn('flex-1 rounded-lg py-2 text-xs font-medium', cat===k?'bg-white text-indigo-700 shadow-sm':'text-slate-500')}>{l}</button>
+            className={cn('flex-1 rounded-lg py-2 text-xs font-medium', cat===k?'bg-sky-400/15 text-sky-200 shadow-[inset_0_0_0_1px_rgba(125,211,252,.18)]':'text-slate-400')}>{l}</button>
         ))}
       </div>
 
@@ -6261,7 +6498,7 @@ function InputHub() {
           {Object.entries(HUB_TYPES).map(([k,v])=>(
             <button key={k} onClick={()=>pick(k)}
               className={cn('rounded-xl border px-3 py-2.5 text-sm font-medium text-left transition-colors',
-                picked===k?'border-indigo-500 bg-indigo-50 text-indigo-700':'border-slate-200 bg-white text-slate-600')}>
+                picked===k?'border-sky-300/30 bg-sky-400/15 text-sky-100':'border-slate-500/15 bg-slate-950/50 text-slate-400')}>
               {v.label}
             </button>
           ))}
@@ -6554,11 +6791,11 @@ function LogScreen() {
       <PageHeader title="Vault" subtitle="Education / Interview / Meeting"
         action={<Btn size="sm" onClick={()=>setShowForm(true)}><PlusIcon size={14}/> Add</Btn>}/>
 
-      <div className="mb-4 flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
+      <div className="nx9-segment mb-4 flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
         {TABS.map(({k,l})=>(
           <button key={k} onClick={()=>{setTab(k);setFilterStaff('');setFilterTopic('');setFilterParticipant('');}}
             className={cn('flex-1 rounded-lg py-2 text-xs font-medium transition-colors',
-              tab===k?'bg-white text-indigo-700 shadow-sm':'text-slate-500')}>{l}</button>
+              tab===k?'bg-sky-400/15 text-sky-200 shadow-[inset_0_0_0_1px_rgba(125,211,252,.18)]':'text-slate-400')}>{l}</button>
         ))}
       </div>
 
@@ -6857,11 +7094,11 @@ function ReviewScreen() {
     <>
       <PageHeader title="Insight" subtitle="Weekly review / Pattern map"/>
 
-      <div className="mb-4 flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
+      <div className="nx9-segment mb-4 flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
         {[{k:'weekly',l:'📊 週次Insight'},{k:'location',l:'🧭 現在地マップ'}].map(({k,l})=>(
           <button key={k} onClick={()=>setTab(k)}
             className={cn('flex-1 rounded-lg py-2 text-xs font-medium transition-colors',
-              tab===k?'bg-white text-indigo-700 shadow-sm':'text-slate-500')}>{l}</button>
+              tab===k?'bg-sky-400/15 text-sky-200 shadow-[inset_0_0_0_1px_rgba(125,211,252,.18)]':'text-slate-400')}>{l}</button>
         ))}
       </div>
 
@@ -6874,7 +7111,7 @@ function ReviewScreen() {
               {[7,14,30].map(d=>(
                 <button key={d} onClick={()=>setDays(d)}
                   className={cn('rounded-full border px-3 py-1 text-xs font-medium',
-                    days===d?'border-indigo-600 bg-indigo-600 text-white':'border-slate-200 bg-white text-slate-600')}>{d}日</button>
+                    days===d?'border-sky-300/30 bg-sky-400/15 text-sky-100':'border-slate-500/15 bg-slate-950/50 text-slate-400')}>{d}日</button>
               ))}
             </div>
             <p className="text-xs text-slate-500">{loadingLog?'Loading...':`中身のある教育・面談ログ ${logCount}件を対象にします。`}</p>
@@ -7209,7 +7446,7 @@ function CaptureExport({ onClose }) {
         {[7,14,30,90].map(d=>(
           <button key={d} onClick={()=>setDays(d)}
             className={cn('rounded-full border px-3 py-1 text-sm font-medium',
-              days===d?'border-indigo-600 bg-indigo-600 text-white':'border-slate-200 bg-white text-slate-600')}>
+              days===d?'border-sky-300/30 bg-sky-400/15 text-sky-100':'border-slate-500/15 bg-slate-950/50 text-slate-400')}>
             {d}日
           </button>
         ))}
@@ -7734,7 +7971,7 @@ function CalendarScreen() {
   const EventBadge = ({ev}) => {
     const cat = SCHED_CATS[ev.type] || SCHED_CATS.other;
     return (
-    <div className={cn('flex items-center gap-1 text-xs py-1 px-2 rounded mb-0.5 group',
+    <div className={cn('nx9-event flex items-center gap-1 text-xs py-1 px-2 rounded mb-0.5 group',
       ev.done?'bg-slate-100 text-slate-400':`${cat.card} ${cat.head}`)}>
       <span className={cn('flex-1 truncate', ev.done&&'line-through')} onClick={()=>ev.id&&setEditItem(ev.raw)}>{ev.label}</span>
       {!ev.readonly && (
@@ -7752,8 +7989,8 @@ function CalendarScreen() {
     const isToday = iso===isoStr(today);
     const isPast = d < today;
     return (
-      <div className={cn('rounded-xl border p-2.5 min-h-[52px]',
-        isToday?'border-indigo-300 bg-indigo-50':isPast?'border-slate-100 bg-slate-50/60':'border-slate-200 bg-white')}>
+      <div className={cn('nx9-calendar-day rounded-xl border p-2.5 min-h-[52px]',
+        isToday?'today border-sky-300/30 bg-sky-400/10':isPast?'border-slate-500/10 bg-slate-950/30':'border-slate-500/15 bg-slate-950/40')}>
         <div className="flex items-center justify-between mb-1">
           <span className={cn('text-xs font-semibold',
             isToday?'text-indigo-600':isPast?'text-slate-300':
@@ -7783,11 +8020,11 @@ function CalendarScreen() {
         {syncing ? '同期中...' : '🔄 Chronosからスタッフ日程をBatch同期'}
       </button>
 
-      <div className="mb-4 flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
+      <div className="nx9-segment mb-4 flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
         {[{k:'week',l:'週'},{k:'month',l:'月'}].map(({k,l})=>(
           <button key={k} onClick={()=>setView(k)}
             className={cn('flex-1 rounded-lg py-2 text-sm font-medium transition-colors',
-              view===k?'bg-white text-indigo-700 shadow-sm':'text-slate-500')}>
+              view===k?'bg-sky-400/15 text-sky-200 shadow-[inset_0_0_0_1px_rgba(125,211,252,.18)]':'text-slate-400')}>
             {l}
           </button>
         ))}
@@ -8382,25 +8619,25 @@ function AppShell({ children, currentScreen, navTo }) {
   return (
     <div className="nexus-command flex min-h-screen flex-col md:flex-row">
       <div className="fixed inset-x-0 top-0 z-[200] mobile-safe-top bg-[#02040a] md:hidden"/>
-      <aside className="hidden md:flex md:w-56 md:flex-col md:fixed md:inset-y-0 border-r border-slate-700/40 bg-slate-950/80">
-        <div className="flex h-16 items-center gap-3 px-5 border-b border-slate-700/30 safe-pt md:safe-pt">
-          <img src={NEXUS_LOGO} alt="" className="h-9 w-9 shrink-0 shadow-[0_0_24px_rgba(56,189,248,.18)]" style={{borderRadius:'22%'}}/>
+      <aside className="nx9-side hidden md:flex md:w-56 md:flex-col md:fixed md:inset-y-0 border-r">
+        <div className="flex h-16 items-center gap-3 px-5 border-b border-sky-300/10 safe-pt md:safe-pt">
+          <img src={NEXUS_LOGO} alt="" className="h-9 w-9 shrink-0 shadow-[0_0_24px_rgba(56,189,248,.12)]" style={{borderRadius:'22%'}}/>
           <div>
-            <div className="nx-metal-text text-sm font-semibold tracking-[.22em]">NEXUS</div>
-            <div className="font-mono text-[10px] text-sky-400/70">COMMAND OS</div>
+            <div className="text-sm font-semibold tracking-[.22em] text-slate-100">NEXUS</div>
+            <div className="font-mono text-[9px] tracking-[.14em] text-sky-300/60">COMMAND CENTER</div>
           </div>
         </div>
         <nav className="flex-1 px-3 py-3 space-y-1">
           {NAV_ITEMS.map(({id,screen,label,Icon})=>(
             <button key={id} onClick={()=>navTo(screen)}
-              className={cn('flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-colors',
-                activeNav===id ? 'border border-sky-400/25 bg-sky-950/40 text-sky-300 shadow-[0_0_20px_rgba(56,189,248,.10)]' : 'text-slate-400 hover:bg-slate-900/70 hover:text-slate-200')}>
+              className={cn('nx9-side-item flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-3 text-sm font-medium transition-colors',
+                activeNav===id ? 'active' : 'text-slate-500 hover:bg-slate-900/55 hover:text-slate-200')}>
               <Icon size={18}/>{label}
             </button>
           ))}
-          <div className="my-3 h-px bg-slate-700/30" />
-          <button onClick={()=>navTo('staff')} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-slate-400 hover:bg-slate-900/70 hover:text-slate-200"><UsersIcon size={18}/>Staff</button>
-          <button onClick={()=>navTo('settings')} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-slate-400 hover:bg-slate-900/70 hover:text-slate-200"><SettingsIcon size={18}/>System</button>
+          <div className="my-3 h-px bg-sky-300/10" />
+          <button onClick={()=>navTo('staff')} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-slate-500 hover:bg-slate-900/55 hover:text-slate-200"><UsersIcon size={18}/>Staff</button>
+          <button onClick={()=>navTo('settings')} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-slate-500 hover:bg-slate-900/55 hover:text-slate-200"><SettingsIcon size={18}/>System</button>
         </nav>
       </aside>
 
@@ -8411,13 +8648,13 @@ function AppShell({ children, currentScreen, navTo }) {
         </main>
       </div>
 
-      <nav className="fixed bottom-0 inset-x-0 z-30 md:hidden ios-blur border-t border-slate-700/40 safe-pb">
+      <nav className="nx9-bottom-nav fixed bottom-0 inset-x-0 z-30 md:hidden safe-pb border-t">
         <div className="flex">
           {NAV_ITEMS.map(({id,screen,label,Icon})=>(
             <button key={id} onClick={()=>navTo(screen)}
-              className={cn('flex flex-1 flex-col items-center gap-1 pt-2.5 pb-1 text-[10px] font-medium',
-                activeNav===id ? 'text-sky-300' : 'text-slate-500')}>
-              <Icon size={22}/>
+              className={cn('nx9-bottom-item flex flex-1 flex-col items-center gap-1 pt-2.5 pb-1 text-[10px] font-medium',
+                activeNav===id ? 'active' : 'text-slate-600')}>
+              <Icon size={21}/>
               {label}
             </button>
           ))}
