@@ -1974,6 +1974,139 @@
       color:#c67a70 !important;
     }
 
+  
+    /* ─── NEXUS v11 READABILITY AUDIT FIX ─── */
+    .nx11-page-header {
+      margin-bottom: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .nx11-page-main {
+      width: 100%;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .nx11-page-title-wrap {
+      min-width: 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      flex: 1 1 auto;
+    }
+    .nx11-page-copy {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+    .nx11-page-title {
+      color: #f8fbff;
+      font-size: 30px;
+      line-height: 1.08;
+      font-weight: 650;
+      letter-spacing: -.035em;
+      word-break: keep-all;
+    }
+    .nx11-page-subtitle {
+      margin-top: 7px;
+      color: rgba(203,213,225,.72);
+      font-size: 12px;
+      line-height: 1.5;
+      letter-spacing: .03em;
+    }
+    .nx11-page-action {
+      width: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-start;
+    }
+    @media (min-width: 640px) {
+      .nx11-page-header { gap: 8px; }
+      .nx11-page-main { align-items: flex-end; }
+      .nx11-page-action { width: auto; justify-content: flex-end; }
+    }
+
+    html[data-nexus-mode="wa"] .nx11-page-title,
+    html[data-nexus-mode="wa"] .nx11-page-subtitle {
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      text-shadow: none;
+    }
+    html[data-nexus-mode="wa"] .nx11-page-title {
+      font-size: 28px;
+      letter-spacing: .02em;
+      color: #eee9dd;
+      font-weight: 700;
+    }
+    html[data-nexus-mode="wa"] .nx11-page-subtitle {
+      color: rgba(231,226,214,.72);
+    }
+
+    /* global contrast */
+    .nexus-command ::placeholder {
+      color: rgba(203,213,225,.48) !important;
+      opacity: 1;
+    }
+    html[data-nexus-mode="wa"] .nexus-command ::placeholder {
+      color: rgba(223,216,204,.52) !important;
+    }
+    .nexus-command option {
+      background: #0b1220;
+      color: #edf7ff;
+    }
+    html[data-nexus-mode="wa"] .nexus-command option {
+      background: #13161a;
+      color: #eee9dd;
+    }
+    .nexus-command [class*="text-slate-900"] { color: #f8fbff !important; }
+    .nexus-command [class*="text-slate-800"] { color: #f1f5f9 !important; }
+    .nexus-command [class*="text-slate-700"] { color: #e2e8f0 !important; }
+    .nexus-command [class*="text-slate-600"] { color: #cbd5e1 !important; }
+    .nexus-command [class*="text-slate-500"] { color: rgba(203,213,225,.82) !important; }
+    .nexus-command [class*="text-slate-400"] { color: rgba(203,213,225,.72) !important; }
+    .nexus-command [class*="text-slate-300"] { color: rgba(226,232,240,.88) !important; }
+
+    html[data-nexus-mode="wa"] .nexus-command [class*="text-slate-900"] { color: #f3efe6 !important; }
+    html[data-nexus-mode="wa"] .nexus-command [class*="text-slate-800"] { color: #eee9dd !important; }
+    html[data-nexus-mode="wa"] .nexus-command [class*="text-slate-700"] { color: #e7e1d5 !important; }
+    html[data-nexus-mode="wa"] .nexus-command [class*="text-slate-600"] { color: #d4ccbe !important; }
+    html[data-nexus-mode="wa"] .nexus-command [class*="text-slate-500"] { color: rgba(231,226,214,.86) !important; }
+    html[data-nexus-mode="wa"] .nexus-command [class*="text-slate-400"] { color: rgba(231,226,214,.76) !important; }
+    html[data-nexus-mode="wa"] .nexus-command [class*="text-slate-300"] { color: rgba(238,233,221,.90) !important; }
+
+    /* labels and helper text */
+    .nexus-command label,
+    .nexus-command .text-xs,
+    .nexus-command .text-sm {
+      text-rendering: optimizeLegibility;
+    }
+    html[data-nexus-mode="wa"] .nexus-command input[type="checkbox"],
+    html[data-nexus-mode="wa"] .nexus-command input[type="radio"] {
+      accent-color: #6b89a6;
+    }
+
+    /* improve ghost dark boxes on forms */
+    html[data-nexus-mode="wa"] .nexus-command .rounded-2xl,
+    html[data-nexus-mode="wa"] .nexus-command .rounded-xl,
+    html[data-nexus-mode="wa"] .nexus-command .rounded-lg {
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+    }
+
+    /* button readability */
+    html[data-nexus-mode="wa"] button {
+      -webkit-tap-highlight-color: transparent;
+    }
+    html[data-nexus-mode="wa"] .nx10-mode-switch button,
+    html[data-nexus-mode="wa"] .nx8-refresh,
+    html[data-nexus-mode="wa"] .nx9-back,
+    html[data-nexus-mode="wa"] .nx8-module,
+    html[data-nexus-mode="wa"] .nx8-card,
+    html[data-nexus-mode="wa"] .nx8-primary,
+    html[data-nexus-mode="wa"] .nx8-tile {
+      color: #eee9dd;
+    }
+
   </style>
 </head>
 <body class="bg-[#F2F2F7] text-slate-900 min-h-screen">
@@ -2278,19 +2411,21 @@ function StatusBadge({ status }) {
 function PageHeader({ title, subtitle, action, onBack }) {
   const { uiMode='nexus' } = useApp();
   return (
-    <div className="nx9-page-header">
-      <div className="nx9-page-title-wrap">
-        {onBack && (
-          <button onClick={onBack} className="nx9-back">
-            <ArrowLeftIcon size={18}/>
-          </button>
-        )}
-        <div className="min-w-0">
-          <h1 className="nx9-page-title truncate">{uiTitle(title, uiMode)}</h1>
-          {subtitle && <p className="nx9-page-subtitle truncate">{uiSubtitle(subtitle, uiMode)}</p>}
+    <div className="nx11-page-header">
+      <div className="nx11-page-main">
+        <div className="nx11-page-title-wrap">
+          {onBack && (
+            <button onClick={onBack} className="nx9-back">
+              <ArrowLeftIcon size={18}/>
+            </button>
+          )}
+          <div className="nx11-page-copy">
+            <h1 className="nx11-page-title">{uiTitle(title, uiMode)}</h1>
+            {subtitle && <p className="nx11-page-subtitle">{uiSubtitle(subtitle, uiMode)}</p>}
+          </div>
         </div>
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className="nx11-page-action">{action}</div>}
     </div>
   );
 }
