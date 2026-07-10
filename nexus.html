@@ -1621,6 +1621,359 @@
       box-shadow:0 0 0 3px rgba(56,189,248,.08),inset 0 1px 0 rgba(255,255,255,.03) !important;
     }
 
+  
+    /* ─── NEXUS v10 DUAL MODE : 和 / NEXUS ─── */
+    .nx10-mode-switch {
+      display:inline-flex;
+      align-items:center;
+      gap:3px;
+      padding:3px;
+      border-radius:999px;
+      border:1px solid rgba(125,211,252,.16);
+      background:rgba(3,8,18,.74);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .nx10-mode-switch button {
+      min-width:48px;
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:10px;
+      font-weight:700;
+      letter-spacing:.08em;
+      color:rgba(148,163,184,.76);
+      transition:.18s ease;
+    }
+    .nx10-mode-switch button.active {
+      color:#eaf7ff;
+      background:rgba(56,189,248,.14);
+      box-shadow:inset 0 0 0 1px rgba(125,211,252,.18),0 0 14px rgba(56,189,248,.06);
+    }
+
+    .nx10-wa-splash {
+      position:fixed;
+      inset:0;
+      z-index:999;
+      display:grid;
+      place-items:center;
+      overflow:hidden;
+      color:#eee9dd;
+      background:
+        radial-gradient(circle at 50% 34%, rgba(33,55,84,.22), transparent 34%),
+        linear-gradient(180deg,#111317 0%,#08090b 100%);
+    }
+    .nx10-wa-splash::before {
+      content:'';
+      position:absolute;
+      inset:0;
+      opacity:.24;
+      background-image:
+        radial-gradient(circle at 20% 20%, rgba(255,255,255,.06) 0 1px, transparent 1.4px),
+        radial-gradient(circle at 70% 60%, rgba(255,255,255,.045) 0 1px, transparent 1.4px);
+      background-size:22px 22px,31px 31px;
+      mix-blend-mode:soft-light;
+    }
+    .nx10-wa-splash::after {
+      content:'';
+      position:absolute;
+      inset:0;
+      background:
+        linear-gradient(90deg,transparent 0 49.8%,rgba(238,233,221,.05) 50%,transparent 50.2%),
+        radial-gradient(circle at 50% 50%,transparent 0 35%,rgba(0,0,0,.35) 100%);
+      pointer-events:none;
+    }
+    .nx10-wa-inner {
+      position:relative;
+      z-index:1;
+      display:grid;
+      justify-items:center;
+      padding:28px;
+    }
+    .nx10-enso {
+      position:relative;
+      width:168px;
+      height:168px;
+      margin-bottom:30px;
+      border-radius:50%;
+    }
+    .nx10-enso::before {
+      content:'';
+      position:absolute;
+      inset:8px;
+      border-radius:50%;
+      border:12px solid transparent;
+      border-top-color:#d9d2c4;
+      border-right-color:#b9b2a5;
+      border-bottom-color:#858079;
+      transform:rotate(-18deg);
+      filter:drop-shadow(0 0 10px rgba(238,233,221,.08));
+      -webkit-mask:
+        radial-gradient(circle, transparent 0 52%, #000 54% 66%, transparent 68%),
+        linear-gradient(#000,#000);
+      mask:
+        radial-gradient(circle, transparent 0 52%, #000 54% 66%, transparent 68%),
+        linear-gradient(#000,#000);
+      opacity:.92;
+    }
+    .nx10-enso::after {
+      content:'';
+      position:absolute;
+      right:22px;
+      top:18px;
+      width:24px;
+      height:14px;
+      border-radius:70% 30% 65% 35%;
+      background:#111317;
+      transform:rotate(-18deg);
+    }
+    .nx10-enso-core {
+      position:absolute;
+      inset:52px;
+      display:grid;
+      place-items:center;
+      border-radius:50%;
+      border:1px solid rgba(109,137,170,.42);
+      color:#dce4ef;
+      font-family:ui-serif,"Yu Mincho","Hiragino Mincho ProN",serif;
+      font-size:24px;
+      letter-spacing:.08em;
+      background:radial-gradient(circle,rgba(31,55,85,.38),rgba(9,11,15,.9));
+      box-shadow:inset 0 0 18px rgba(71,107,151,.16);
+    }
+    .nx10-wa-mark {
+      font-family:ui-serif,"Yu Mincho","Hiragino Mincho ProN",serif;
+      font-size:34px;
+      letter-spacing:.28em;
+      margin-right:-.28em;
+      color:#ece7dc;
+      font-weight:500;
+    }
+    .nx10-wa-state {
+      margin-top:14px;
+      font-size:11px;
+      letter-spacing:.26em;
+      color:#8095ad;
+    }
+    .nx10-wa-tagline {
+      margin-top:18px;
+      font-family:ui-serif,"Yu Mincho","Hiragino Mincho ProN",serif;
+      font-size:12px;
+      letter-spacing:.10em;
+      color:rgba(226,220,207,.58);
+    }
+
+    html[data-nexus-mode="wa"] .nexus-command {
+      --wa-sumi:#111317;
+      --wa-sumi-2:#171a1f;
+      --wa-ai:#233a58;
+      --wa-ai-soft:#345477;
+      --wa-kinari:#eee9dd;
+      --wa-gin:#a9adb1;
+      --wa-shu:#a94a3f;
+      color:#e9e5db;
+      background:
+        radial-gradient(circle at 90% 6%,rgba(43,68,98,.18),transparent 28%),
+        radial-gradient(circle at 10% 34%,rgba(255,255,255,.025),transparent 32%),
+        linear-gradient(180deg,#121418 0%,#090a0c 100%) !important;
+      font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+    }
+    html[data-nexus-mode="wa"] .nexus-command::before {
+      opacity:.11 !important;
+      background-image:
+        radial-gradient(circle at 20% 20%,rgba(255,255,255,.08) 0 1px,transparent 1.4px),
+        radial-gradient(circle at 70% 60%,rgba(255,255,255,.05) 0 1px,transparent 1.4px) !important;
+      background-size:23px 23px,31px 31px !important;
+      transform:none !important;
+    }
+    html[data-nexus-mode="wa"] .nx8-mark,
+    html[data-nexus-mode="wa"] .nx9-page-title,
+    html[data-nexus-mode="wa"] .nx8-primary-title,
+    html[data-nexus-mode="wa"] .nx8-card-title {
+      font-family:ui-serif,"Yu Mincho","Hiragino Mincho ProN",serif;
+      background:none;
+      -webkit-background-clip:initial;
+      color:#eee9dd;
+      text-shadow:none;
+      letter-spacing:.03em;
+    }
+    html[data-nexus-mode="wa"] .nx8-mark {
+      font-size:31px;
+      letter-spacing:.24em;
+      margin-right:-.24em;
+    }
+    html[data-nexus-mode="wa"] .nx8-tag {
+      border-color:rgba(133,151,173,.18);
+      background:rgba(18,22,28,.74);
+      color:#8095ad;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+    }
+    html[data-nexus-mode="wa"] .nx8-dot {
+      background:#a94a3f;
+      box-shadow:0 0 0 3px rgba(169,74,63,.10);
+    }
+    html[data-nexus-mode="wa"] .nx8-refresh,
+    html[data-nexus-mode="wa"] .nx9-back {
+      border-color:rgba(157,165,173,.15);
+      background:rgba(18,21,25,.78);
+      color:#b7b4ac;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+    }
+    html[data-nexus-mode="wa"] .nx8-commandbar {
+      gap:8px;
+    }
+    html[data-nexus-mode="wa"] .nx8-metric,
+    html[data-nexus-mode="wa"] .nx8-card,
+    html[data-nexus-mode="wa"] .nx8-module,
+    html[data-nexus-mode="wa"] .nx8-tile {
+      border-color:rgba(151,157,162,.13);
+      background:
+        linear-gradient(145deg,rgba(25,28,33,.88),rgba(13,15,18,.92));
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.025);
+    }
+    html[data-nexus-mode="wa"] .nx8-metric-label,
+    html[data-nexus-mode="wa"] .nx8-section-label {
+      color:rgba(204,199,188,.54);
+    }
+    html[data-nexus-mode="wa"] .nx8-metric-value {
+      color:#9aaec4;
+      text-shadow:none;
+    }
+    html[data-nexus-mode="wa"] .nx8-primary {
+      border-color:rgba(134,147,162,.20);
+      background:
+        radial-gradient(circle at 86% 26%,rgba(42,66,94,.24),transparent 28%),
+        linear-gradient(145deg,rgba(29,32,37,.96),rgba(12,14,17,.97));
+      box-shadow:
+        0 22px 48px rgba(0,0,0,.28),
+        inset 0 1px 0 rgba(255,255,255,.035);
+    }
+    html[data-nexus-mode="wa"] .nx8-primary::before {
+      right:-18px;
+      top:20px;
+      width:164px;
+      height:164px;
+      opacity:.62;
+      background:
+        radial-gradient(circle,rgba(220,227,235,.78) 0 2px,rgba(73,103,139,.50) 3px 7px,transparent 8px 16px),
+        conic-gradient(from -18deg,transparent 0 30deg,rgba(129,148,169,.42) 38deg,transparent 51deg,transparent 160deg,rgba(203,198,187,.24) 174deg,transparent 188deg,transparent 286deg);
+      box-shadow:none;
+      filter:none;
+    }
+    html[data-nexus-mode="wa"] .nx8-primary::after,
+    html[data-nexus-mode="wa"] .nx8-card-art,
+    html[data-nexus-mode="wa"] .nx8-section-line {
+      background:linear-gradient(90deg,rgba(81,108,140,.66),transparent);
+      box-shadow:none;
+    }
+    html[data-nexus-mode="wa"] .nx8-kicker {
+      color:#879bb2;
+    }
+    html[data-nexus-mode="wa"] .nx8-primary-copy,
+    html[data-nexus-mode="wa"] .nx8-card-copy,
+    html[data-nexus-mode="wa"] .nx9-page-subtitle {
+      color:rgba(221,216,204,.60);
+      text-transform:none;
+      letter-spacing:.04em;
+    }
+    html[data-nexus-mode="wa"] .nx8-pulse {
+      border-color:rgba(96,119,145,.28);
+      box-shadow:0 0 0 14px rgba(63,83,107,.035),0 0 0 28px rgba(63,83,107,.018);
+    }
+    html[data-nexus-mode="wa"] .nx8-module-glyph {
+      border-color:rgba(123,139,157,.18);
+      background:#15191e;
+      color:#a8b3c0;
+      box-shadow:none;
+    }
+    html[data-nexus-mode="wa"] .nx8-module-label,
+    html[data-nexus-mode="wa"] .nx8-tile-copy {
+      color:rgba(231,226,214,.70);
+    }
+    html[data-nexus-mode="wa"] .nx8-tile-day {
+      color:#8fa4bc;
+    }
+    html[data-nexus-mode="wa"] .nx8-alert {
+      border-color:rgba(169,74,63,.24);
+      background:linear-gradient(145deg,rgba(60,29,28,.52),rgba(16,16,18,.90));
+    }
+    html[data-nexus-mode="wa"] .nx8-alert-head {
+      color:#c67a70;
+    }
+    html[data-nexus-mode="wa"] .nx9-side,
+    html[data-nexus-mode="wa"] .nx9-bottom-nav {
+      background:rgba(12,14,17,.92) !important;
+      border-color:rgba(151,157,162,.11) !important;
+      box-shadow:0 -18px 50px rgba(0,0,0,.34);
+    }
+    html[data-nexus-mode="wa"] .nx9-side-item.active {
+      border-color:rgba(101,126,155,.18) !important;
+      background:linear-gradient(90deg,rgba(40,61,86,.26),rgba(40,61,86,.04)) !important;
+      color:#b6c3d1 !important;
+    }
+    html[data-nexus-mode="wa"] .nx9-bottom-item.active {
+      color:#b6c3d1 !important;
+    }
+    html[data-nexus-mode="wa"] .nx9-bottom-item.active::before {
+      background:#a94a3f;
+      box-shadow:none;
+    }
+    html[data-nexus-mode="wa"] .nx10-mode-switch {
+      border-color:rgba(154,159,164,.14);
+      background:rgba(16,19,23,.82);
+    }
+    html[data-nexus-mode="wa"] .nx10-mode-switch button.active {
+      color:#eee9dd;
+      background:rgba(42,62,85,.72);
+      box-shadow:inset 0 0 0 1px rgba(137,153,171,.14);
+    }
+    html[data-nexus-mode="wa"] .nx9-modal {
+      background:
+        radial-gradient(circle at 90% 0%,rgba(42,64,90,.18),transparent 30%),
+        linear-gradient(180deg,#121418,#090a0c) !important;
+    }
+    html[data-nexus-mode="wa"] .nx9-modal-header {
+      background:rgba(13,15,18,.95);
+      border-color:rgba(151,157,162,.11);
+    }
+    html[data-nexus-mode="wa"] .nx9-modal-title {
+      color:#eee9dd;
+      font-family:ui-serif,"Yu Mincho","Hiragino Mincho ProN",serif;
+      text-transform:none;
+    }
+    html[data-nexus-mode="wa"] .nexus-command input,
+    html[data-nexus-mode="wa"] .nexus-command textarea,
+    html[data-nexus-mode="wa"] .nexus-command select {
+      border-color:rgba(151,157,162,.16) !important;
+      background:rgba(12,15,18,.90) !important;
+      color:#eee9dd !important;
+    }
+    html[data-nexus-mode="wa"] .nexus-command input:focus,
+    html[data-nexus-mode="wa"] .nexus-command textarea:focus,
+    html[data-nexus-mode="wa"] .nexus-command select:focus {
+      border-color:rgba(94,120,150,.42) !important;
+      box-shadow:0 0 0 3px rgba(58,80,105,.10) !important;
+    }
+    html[data-nexus-mode="wa"] .nexus-command [class*="text-sky-"],
+    html[data-nexus-mode="wa"] .nexus-command [class*="text-indigo-"],
+    html[data-nexus-mode="wa"] .nexus-command [class*="text-blue-"],
+    html[data-nexus-mode="wa"] .nexus-command [class*="text-emerald-"] {
+      color:#98abc0 !important;
+    }
+    html[data-nexus-mode="wa"] .nexus-command [class*="bg-sky-"],
+    html[data-nexus-mode="wa"] .nexus-command [class*="bg-indigo-"],
+    html[data-nexus-mode="wa"] .nexus-command [class*="bg-blue-"],
+    html[data-nexus-mode="wa"] .nexus-command [class*="bg-emerald-"] {
+      background-color:rgba(42,62,85,.45) !important;
+    }
+    html[data-nexus-mode="wa"] .nexus-command [class*="border-sky-"],
+    html[data-nexus-mode="wa"] .nexus-command [class*="border-indigo-"],
+    html[data-nexus-mode="wa"] .nexus-command [class*="border-blue-"],
+    html[data-nexus-mode="wa"] .nexus-command [class*="border-emerald-"] {
+      border-color:rgba(111,130,151,.18) !important;
+    }
+    html[data-nexus-mode="wa"] .nexus-command [class*="text-rose-"] {
+      color:#c67a70 !important;
+    }
+
   </style>
 </head>
 <body class="bg-[#F2F2F7] text-slate-900 min-h-screen">
@@ -1695,6 +2048,49 @@ const BRIDGE_KIND_LABELS = {
 };
 
 // ─── UTILITIES ────────────────────────────────────────────
+
+const UI_LABELS = {
+  home:      { nexus:'Core',      wa:'ホーム' },
+  input:     { nexus:'Input',     wa:'入力' },
+  archive:   { nexus:'Archive',   wa:'記録' },
+  reflection:{ nexus:'Insight',   wa:'振り返り' },
+  settings:  { nexus:'System',    wa:'設定' },
+  oracle:    { nexus:'Oracle',    wa:'共有作成' },
+  gateway:   { nexus:'Gateway',   wa:'入力ハブ' },
+  initiate:  { nexus:'Initiate',  wa:'キャプチャー' },
+  forge:     { nexus:'Forge',     wa:'生成' },
+  chronos:   { nexus:'Chronos',   wa:'予定' },
+  vault:     { nexus:'Vault',     wa:'ログ' },
+  codex:     { nexus:'Codex',     wa:'スキル' },
+};
+const UI_TITLE_KEYS = {
+  Core:'home', Home:'home',
+  Input:'input', Archive:'archive',
+  Insight:'reflection', System:'settings',
+  Oracle:'oracle', Gateway:'gateway',
+  Initiate:'initiate', Forge:'forge',
+  Chronos:'chronos', Vault:'vault', Codex:'codex',
+};
+const UI_SUBTITLES = {
+  'Transcript → Report → Knowledge':'文字起こしから共有文・記録へ',
+  'Route every input':'入力を目的別に整理',
+  'Raw input → Structured record':'情報を整理して記録',
+  'Weekly review / Pattern map':'週次の振り返り・傾向分析',
+  'Education / Interview / Meeting':'教育・面談・会議',
+};
+function uiLabel(key, mode='nexus') {
+  const item = UI_LABELS[key];
+  return item ? item[mode] : key;
+}
+function uiTitle(title, mode='nexus') {
+  const key = UI_TITLE_KEYS[title];
+  return key ? uiLabel(key, mode) : title;
+}
+function uiSubtitle(subtitle, mode='nexus') {
+  if (mode !== 'wa') return subtitle;
+  return UI_SUBTITLES[subtitle] || subtitle;
+}
+
 function cn(...args) { return args.filter(Boolean).join(' '); }
 function fmtYen(n) { return '¥' + (n || 0).toLocaleString('ja-JP'); }
 function fmtYenMan(n) {
@@ -1880,6 +2276,7 @@ function StatusBadge({ status }) {
 }
 
 function PageHeader({ title, subtitle, action, onBack }) {
+  const { uiMode='nexus' } = useApp();
   return (
     <div className="nx9-page-header">
       <div className="nx9-page-title-wrap">
@@ -1889,8 +2286,8 @@ function PageHeader({ title, subtitle, action, onBack }) {
           </button>
         )}
         <div className="min-w-0">
-          <h1 className="nx9-page-title truncate">{title}</h1>
-          {subtitle && <p className="nx9-page-subtitle truncate">{subtitle}</p>}
+          <h1 className="nx9-page-title truncate">{uiTitle(title, uiMode)}</h1>
+          {subtitle && <p className="nx9-page-subtitle truncate">{uiSubtitle(subtitle, uiMode)}</p>}
         </div>
       </div>
       {action && <div className="shrink-0">{action}</div>}
@@ -1925,16 +2322,17 @@ function ErrState({ error }) {
 }
 
 function FullModal({ title, onClose, onSave, saveLabel='Save', saving, children }) {
+  const { uiMode='nexus' } = useApp();
   return (
     <div className="nx9-modal fixed inset-0 z-50 flex flex-col safe-pt">
       <div className="nx9-modal-header flex items-center justify-between px-4 py-3.5">
         <button onClick={onClose} className="flex items-center gap-1 text-sm font-medium text-slate-300 hover:text-sky-200">
-          <ArrowLeftIcon size={18}/> Close
+          <ArrowLeftIcon size={18}/> {uiMode==='wa' ? '閉じる' : 'Close'}
         </button>
-        <h2 className="nx9-modal-title max-w-[58%] truncate">{title}</h2>
+        <h2 className="nx9-modal-title max-w-[58%] truncate">{uiTitle(title, uiMode)}</h2>
         {onSave && (
           <button onClick={onSave} disabled={saving} className="text-sm font-semibold text-sky-300 disabled:opacity-40">
-            {saving ? 'Saving…' : saveLabel}
+            {saving ? (uiMode==='wa' ? '保存中…' : 'Saving…') : (uiMode==='wa' && saveLabel==='Save' ? '保存' : saveLabel)}
           </button>
         )}
         {!onSave && <div className="w-14"/>}
@@ -2140,7 +2538,19 @@ function AuthScreen({ sb }) {
 
 
 // ─── NEXUS DARK COMMAND COMPONENTS ────────────────────────
-function NexusStartup({ onSkip }) {
+function NexusStartup({ onSkip, mode='nexus' }) {
+  if (mode === 'wa') {
+    return (
+      <button className="nx10-wa-splash" onClick={onSkip} aria-label="起動画面を閉じる">
+        <div className="nx10-wa-inner">
+          <div className="nx10-enso"><div className="nx10-enso-core">N</div></div>
+          <div className="nx10-wa-mark">NEXUS</div>
+          <div className="nx10-wa-state">起動中</div>
+          <div className="nx10-wa-tagline">思考を整え、次へ進む。</div>
+        </div>
+      </button>
+    );
+  }
   return (
     <button className="nx8-splash" onClick={onSkip} aria-label="Skip startup">
       <div className="nx8-splash-inner">
@@ -2262,10 +2672,11 @@ function NexusModuleTile({ title, type, onClick }) {
 }
 
 function HomeScreen() {
-  const { nav, store, storeLoaded, syncing, refreshAll } = useApp();
+  const { nav, store, storeLoaded, syncing, refreshAll, uiMode, setUiMode } = useApp();
   const skills = store.skills;
   const loading = !storeLoaded;
   const [showForge, setShowForge] = useState(false);
+  const wa = uiMode === 'wa';
 
   const staffFollow = useMemo(() => {
     const t = new Date(); t.setHours(0,0,0,0);
@@ -2297,8 +2708,8 @@ function HomeScreen() {
 
   const queueCount = staffFollow.edNoSched.length + staffFollow.ivNoSched.length + staffFollow.weekEvents.length;
   const topAlert = [
-    staffFollow.edNoSched.length ? `Education: ${staffFollow.edNoSched.map(s=>s.name).slice(0,2).join(' / ')}` : '',
-    staffFollow.ivNoSched.length ? `Interview: ${staffFollow.ivNoSched.map(s=>s.name).slice(0,2).join(' / ')}` : ''
+    staffFollow.edNoSched.length ? `${wa?'教育':'Education'}: ${staffFollow.edNoSched.map(s=>s.name).slice(0,2).join(' / ')}` : '',
+    staffFollow.ivNoSched.length ? `${wa?'面談':'Interview'}: ${staffFollow.ivNoSched.map(s=>s.name).slice(0,2).join(' / ')}` : ''
   ].filter(Boolean).join('  •  ');
 
   if (loading) return <LoadingState/>;
@@ -2308,84 +2719,92 @@ function HomeScreen() {
       <div className="nx8-topbar">
         <div>
           <div className="nx8-mark">NEXUS</div>
-          <div className="nx8-tag"><span className="nx8-dot" /> COMMAND CENTER</div>
+          <div className="nx8-tag"><span className="nx8-dot" /> {wa ? '思考整理システム' : 'COMMAND CENTER'}</div>
         </div>
-        <button onClick={()=>refreshAll(false)} disabled={syncing} className="nx8-refresh">
-          <Repeat2Icon size={18} className={syncing ? 'animate-spin' : ''} />
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="nx10-mode-switch" aria-label="表示モード">
+            <button className={uiMode==='wa'?'active':''} onClick={()=>setUiMode('wa')}>和</button>
+            <button className={uiMode==='nexus'?'active':''} onClick={()=>setUiMode('nexus')}>NEXUS</button>
+          </div>
+          <button onClick={()=>refreshAll(false)} disabled={syncing} className="nx8-refresh">
+            <Repeat2Icon size={18} className={syncing ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </div>
 
       <div className="nx8-commandbar">
-        <div className="nx8-metric"><div className="nx8-metric-label">Status</div><div className="nx8-metric-value">ONLINE</div></div>
-        <div className="nx8-metric"><div className="nx8-metric-label">Queue</div><div className="nx8-metric-value">{String(queueCount).padStart(2,'0')}</div></div>
-        <div className="nx8-metric"><div className="nx8-metric-label">Timeline</div><div className="nx8-metric-value">TODAY</div></div>
-        <div className="nx8-metric"><div className="nx8-metric-label">Signal</div><div className="nx8-metric-value">{queueCount > 0 ? 'ACTIVE' : 'CLEAR'}</div></div>
+        <div className="nx8-metric"><div className="nx8-metric-label">{wa?'稼働':'Status'}</div><div className="nx8-metric-value">{wa?'稼働中':'ONLINE'}</div></div>
+        <div className="nx8-metric"><div className="nx8-metric-label">{wa?'未処理':'Queue'}</div><div className="nx8-metric-value">{String(queueCount).padStart(2,'0')}</div></div>
+        <div className="nx8-metric"><div className="nx8-metric-label">{wa?'予定':'Timeline'}</div><div className="nx8-metric-value">{wa?'本日':'TODAY'}</div></div>
+        <div className="nx8-metric"><div className="nx8-metric-label">{wa?'状態':'Signal'}</div><div className="nx8-metric-value">{wa?(queueCount>0?'要確認':'平常'):(queueCount>0?'ACTIVE':'CLEAR')}</div></div>
       </div>
 
       {topAlert && (
         <button onClick={()=>nav('staff')} className="nx8-alert">
-          <div className="nx8-alert-head">QUEUE ALERT</div>
+          <div className="nx8-alert-head">{wa?'確認が必要です':'QUEUE ALERT'}</div>
           <div className="nx8-alert-body">{topAlert}</div>
         </button>
       )}
 
       <button onClick={()=>nav('echo')} className="nx8-primary active:scale-[.99]">
-        <div className="nx8-kicker">PRIMARY MODULE</div>
-        <div className="nx8-primary-title">Oracle</div>
-        <div className="nx8-primary-copy">Turn voice into knowledge. Create sharp meeting and education shareouts with one action.</div>
+        <div className="nx8-kicker">{wa?'主要機能':'PRIMARY MODULE'}</div>
+        <div className="nx8-primary-title">{uiLabel('oracle',uiMode)}</div>
+        <div className="nx8-primary-copy">
+          {wa ? '面談や教育の文字起こしを、読みやすい共有文と記録に整えます。' : 'Turn voice into knowledge. Create sharp meeting and education shareouts with one action.'}
+        </div>
         <div className="nx8-pulse" />
       </button>
 
       <div className="nx8-grid">
         <button onClick={()=>nav('inputhub')} className="nx8-card gateway active:scale-[.99]">
-          <div className="nx8-card-title">Gateway</div>
-          <div className="nx8-card-copy">Route every input into the right flow.</div>
+          <div className="nx8-card-title">{uiLabel('gateway',uiMode)}</div>
+          <div className="nx8-card-copy">{wa?'入力したい内容を、目的に合わせて振り分けます。':'Route every input into the right flow.'}</div>
           <div className="nx8-card-art" />
         </button>
         <button onClick={()=>nav('review')} className="nx8-card insight active:scale-[.99]">
-          <div className="nx8-card-title">Insight</div>
-          <div className="nx8-card-copy">Reveal patterns from weekly and monthly review.</div>
+          <div className="nx8-card-title">{uiLabel('reflection',uiMode)}</div>
+          <div className="nx8-card-copy">{wa?'週や月の記録から、傾向と次の行動を整理します。':'Reveal patterns from weekly and monthly review.'}</div>
           <div className="nx8-card-art" />
         </button>
       </div>
 
       <div className="nx8-section">
-        <div className="nx8-section-label">MODULES</div>
+        <div className="nx8-section-label">{wa?'機能一覧':'MODULES'}</div>
         <div className="nx8-section-line" />
       </div>
 
       <div className="nx8-modules">
         <button className="nx8-module active:scale-[.98]" onClick={()=>nav('capture')}>
-          <div className="nx8-module-glyph">△</div><div className="nx8-module-label">Initiate</div>
+          <div className="nx8-module-glyph">記</div><div className="nx8-module-label">{uiLabel('initiate',uiMode)}</div>
         </button>
         <button className="nx8-module active:scale-[.98]" onClick={()=>setShowForge(true)}>
-          <div className="nx8-module-glyph">⌘</div><div className="nx8-module-label">Forge</div>
+          <div className="nx8-module-glyph">作</div><div className="nx8-module-label">{uiLabel('forge',uiMode)}</div>
         </button>
         <button className="nx8-module active:scale-[.98]" onClick={()=>nav('calendar')}>
-          <div className="nx8-module-glyph">◷</div><div className="nx8-module-label">Chronos</div>
+          <div className="nx8-module-glyph">暦</div><div className="nx8-module-label">{uiLabel('chronos',uiMode)}</div>
         </button>
         <button className="nx8-module active:scale-[.98]" onClick={()=>nav('logs')}>
-          <div className="nx8-module-glyph">▣</div><div className="nx8-module-label">Vault</div>
+          <div className="nx8-module-glyph">録</div><div className="nx8-module-label">{uiLabel('vault',uiMode)}</div>
         </button>
         <button className="nx8-module active:scale-[.98]" onClick={()=>nav('skills')}>
-          <div className="nx8-module-glyph">◇</div><div className="nx8-module-label">Codex</div>
+          <div className="nx8-module-glyph">技</div><div className="nx8-module-label">{uiLabel('codex',uiMode)}</div>
         </button>
       </div>
 
       <div className="nx8-section">
-        <div className="nx8-section-label">TIMELINE</div>
+        <div className="nx8-section-label">{wa?'直近の予定':'TIMELINE'}</div>
         <div className="nx8-section-line" />
       </div>
 
       <div className="nx8-timeline">
         {staffFollow.weekEvents.slice(0,5).map((e,i)=>(
           <button key={i} onClick={()=>nav('calendar')} className="nx8-tile active:scale-[.98]">
-            <div className="nx8-tile-day">{e.daysUntil===0 ? 'TODAY' : `+${e.daysUntil}D`}</div>
+            <div className="nx8-tile-day">{e.daysUntil===0 ? (wa?'本日':'TODAY') : `+${e.daysUntil}${wa?'日':'D'}`}</div>
             <div className="nx8-tile-copy line-clamp-2">{e.title}</div>
           </button>
         ))}
         {staffFollow.weekEvents.length === 0 && (
-          <div className="col-span-5 nx8-tile grid place-items-center text-center text-xs text-slate-500">Timeline clear</div>
+          <div className="col-span-5 nx8-tile grid place-items-center text-center text-xs text-slate-500">{wa?'直近の予定はありません':'Timeline clear'}</div>
         )}
       </div>
 
@@ -8546,7 +8965,8 @@ function KpiScreen() {
 
 // ─── SETTINGS SCREEN ──────────────────────────────────────
 function SettingsScreen() {
-  const { sb, user } = useApp();
+  const { sb, user, uiMode, setUiMode } = useApp();
+  const wa = uiMode === 'wa';
   const cfg = useMemo(() => {
     try { return JSON.parse(localStorage.getItem('nexus_cfg')||'{}'); } catch { return {}; }
   }, []);
@@ -8556,7 +8976,7 @@ function SettingsScreen() {
     await sb.auth.signOut();
   };
   const resetCfg = () => {
-    if (!confirm('SupabaseSystemをリセットしますか？ログイン画面に戻ります。')) return;
+    if (!confirm('Supabase接続設定をリセットしますか？ログイン画面に戻ります。')) return;
     localStorage.removeItem('nexus_cfg');
     window.location.reload();
   };
@@ -8566,32 +8986,47 @@ function SettingsScreen() {
       <PageHeader title="System"/>
       <div className="space-y-4">
         <div className="rounded-xl border border-slate-200 bg-white p-5">
-          <h3 className="mb-3 text-sm font-semibold text-slate-700">アカウント</h3>
-          <p className="mb-4 text-sm text-slate-600">{user?.email}</p>
+          <h3 className="mb-2 text-sm font-semibold text-slate-200">表示モード</h3>
+          <p className="mb-4 text-xs leading-relaxed text-slate-500">選択したモードは保存され、次回の起動時にも引き継がれます。</p>
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={()=>setUiMode('wa')}
+              className={cn('rounded-2xl border p-4 text-left transition-all',
+                uiMode==='wa'?'border-sky-300/30 bg-sky-400/10':'border-slate-500/15 bg-slate-950/40')}>
+              <div className="font-serif text-lg text-slate-100">和モード</div>
+              <div className="mt-2 text-xs leading-relaxed text-slate-500">墨・藍・生成りを基調にした、静かな日本的デザイン</div>
+            </button>
+            <button onClick={()=>setUiMode('nexus')}
+              className={cn('rounded-2xl border p-4 text-left transition-all',
+                uiMode==='nexus'?'border-sky-300/30 bg-sky-400/10':'border-slate-500/15 bg-slate-950/40')}>
+              <div className="text-lg font-semibold text-slate-100">Nexusモード</div>
+              <div className="mt-2 text-xs leading-relaxed text-slate-500">黒と青の発光を使ったCommand Centerデザイン</div>
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <h3 className="mb-3 text-sm font-semibold text-slate-200">アカウント</h3>
+          <p className="mb-4 text-sm text-slate-400">{user?.email}</p>
           <Btn variant="secondary" onClick={logout}><LogOutIcon size={14}/> ログアウト</Btn>
         </div>
+
         <div className="rounded-xl border border-slate-200 bg-white p-5">
-          <h3 className="mb-3 text-sm font-semibold text-slate-700">Supabase 接続System</h3>
+          <h3 className="mb-3 text-sm font-semibold text-slate-200">Supabase接続</h3>
           <p className="mb-1 text-xs text-slate-500">Project URL</p>
-          <p className="mb-3 font-mono text-xs text-slate-700 break-all">{cfg.url || '—'}</p>
+          <p className="mb-3 font-mono text-xs text-slate-400 break-all">{cfg.url || '—'}</p>
           <p className="mb-1 text-xs text-slate-500">anon key</p>
-          <p className="mb-4 font-mono text-xs text-slate-700 break-all">{cfg.key ? cfg.key.slice(0,20)+'...' : '—'}</p>
-          <Btn variant="danger" size="sm" onClick={resetCfg}>Systemをリセット</Btn>
+          <p className="mb-4 font-mono text-xs text-slate-400 break-all">{cfg.key ? cfg.key.slice(0,20)+'...' : '—'}</p>
+          <Btn variant="danger" size="sm" onClick={resetCfg}>接続設定をリセット</Btn>
         </div>
+
         <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-5">
-          <h3 className="mb-3 text-sm font-semibold text-indigo-800">📱 ホーム画面にAdd（PWA）</h3>
-          <p className="mb-3 text-xs leading-relaxed text-indigo-700">アプリアイコンとしてホーム画面にAddすると、フルスクリーンで起動できます。</p>
-          <ol className="space-y-1.5 text-xs text-indigo-700">
-            <li>1. SafariでNexusを開いた状態で下部の共有ボタン（□↑）をタップ</li>
-            <li>2.「ホーム画面にAdd」を選択</li>
-            <li>3. 名前は「Nexus」のまま「Add」をタップ</li>
-            <li>4. ホーム画面にインディゴのNアイコンがAddされます</li>
-          </ol>
+          <h3 className="mb-3 text-sm font-semibold text-slate-200">ホーム画面に追加</h3>
+          <p className="mb-3 text-xs leading-relaxed text-slate-500">Safariの共有メニューから「ホーム画面に追加」を選ぶと、アプリのように起動できます。</p>
         </div>
+
         <div className="rounded-xl border border-slate-200 bg-white p-5">
-          <h3 className="mb-2 text-sm font-semibold text-slate-700">バージョン情報</h3>
-          <p className="text-xs text-slate-400">Nexus v1.1 — Single HTML + Supabase</p>
-          <p className="text-xs text-slate-400">将来的に Next.js へ移行予定</p>
+          <h3 className="mb-2 text-sm font-semibold text-slate-200">バージョン情報</h3>
+          <p className="text-xs text-slate-500">Nexus v10 — 和 / Nexus デュアルモード</p>
         </div>
       </div>
     </>
@@ -8600,14 +9035,15 @@ function SettingsScreen() {
 
 // ─── APP SHELL ────────────────────────────────────────────
 const NAV_ITEMS = [
-  { id:'core',    screen:'home',     label:'Core',    Icon:HomeIcon },
-  { id:'input',   screen:'inputhub', label:'Input',   Icon:PlusIcon },
-  { id:'archive', screen:'logs',     label:'Archive', Icon:FileTextIcon },
-  { id:'insight', screen:'review',   label:'Insight', Icon:BarChartIcon },
-  { id:'system',  screen:'skills',   label:'System',  Icon:SettingsIcon },
+  { id:'core',    screen:'home',     key:'home',       Icon:HomeIcon },
+  { id:'input',   screen:'inputhub', key:'input',      Icon:PlusIcon },
+  { id:'archive', screen:'logs',     key:'archive',    Icon:FileTextIcon },
+  { id:'insight', screen:'review',   key:'reflection', Icon:BarChartIcon },
+  { id:'system',  screen:'settings', key:'settings',   Icon:SettingsIcon },
 ];
 
 function AppShell({ children, currentScreen, navTo }) {
+  const { uiMode='nexus' } = useApp();
   const rootScreen = currentScreen.screen;
   const activeNav = ['home','echo','capture','quicklog','opps','oppDetail','oppNew','searchRun','candidates','candidateDetail','searchExplore','explore','nexuscore'].includes(rootScreen) ? 'core'
     : ['inputhub','calendar','schedule','kpi'].includes(rootScreen) ? 'input'
@@ -8624,38 +9060,38 @@ function AppShell({ children, currentScreen, navTo }) {
           <img src={NEXUS_LOGO} alt="" className="h-9 w-9 shrink-0 shadow-[0_0_24px_rgba(56,189,248,.12)]" style={{borderRadius:'22%'}}/>
           <div>
             <div className="text-sm font-semibold tracking-[.22em] text-slate-100">NEXUS</div>
-            <div className="font-mono text-[9px] tracking-[.14em] text-sky-300/60">COMMAND CENTER</div>
+            <div className="font-mono text-[9px] tracking-[.14em] text-sky-300/60">{uiMode==='wa'?'思考整理システム':'COMMAND CENTER'}</div>
           </div>
         </div>
         <nav className="flex-1 px-3 py-3 space-y-1">
-          {NAV_ITEMS.map(({id,screen,label,Icon})=>(
+          {NAV_ITEMS.map(({id,screen,key,Icon})=>(
             <button key={id} onClick={()=>navTo(screen)}
               className={cn('nx9-side-item flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-3 text-sm font-medium transition-colors',
                 activeNav===id ? 'active' : 'text-slate-500 hover:bg-slate-900/55 hover:text-slate-200')}>
-              <Icon size={18}/>{label}
+              <Icon size={18}/>{uiLabel(key,uiMode)}
             </button>
           ))}
           <div className="my-3 h-px bg-sky-300/10" />
-          <button onClick={()=>navTo('staff')} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-slate-500 hover:bg-slate-900/55 hover:text-slate-200"><UsersIcon size={18}/>Staff</button>
-          <button onClick={()=>navTo('settings')} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-slate-500 hover:bg-slate-900/55 hover:text-slate-200"><SettingsIcon size={18}/>System</button>
+          <button onClick={()=>navTo('staff')} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-slate-500 hover:bg-slate-900/55 hover:text-slate-200"><UsersIcon size={18}/>{uiMode==='wa'?'スタッフ':'Staff'}</button>
+          <button onClick={()=>navTo('skills')} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-slate-500 hover:bg-slate-900/55 hover:text-slate-200"><BookOpenIcon size={18}/>{uiLabel('codex',uiMode)}</button>
         </nav>
       </aside>
 
       <div className="flex-1 md:ml-56">
         <main className="mx-auto max-w-2xl px-4 pb-28 md:pb-12 md:pt-8 md:px-8"
-          style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)'}}>
+          style={{paddingTop:'calc(env(safe-area-inset-top, 0px) + 24px)'}}>
           {children}
         </main>
       </div>
 
       <nav className="nx9-bottom-nav fixed bottom-0 inset-x-0 z-30 md:hidden safe-pb border-t">
         <div className="flex">
-          {NAV_ITEMS.map(({id,screen,label,Icon})=>(
+          {NAV_ITEMS.map(({id,screen,key,Icon})=>(
             <button key={id} onClick={()=>navTo(screen)}
               className={cn('nx9-bottom-item flex flex-1 flex-col items-center gap-1 pt-2.5 pb-1 text-[10px] font-medium',
                 activeNav===id ? 'active' : 'text-slate-600')}>
               <Icon size={21}/>
-              {label}
+              {uiLabel(key,uiMode)}
             </button>
           ))}
         </div>
@@ -8681,6 +9117,15 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [history, setHistory] = useState([{ screen: 'home' }]);
   const [showStartup, setShowStartup] = useState(false);
+  const [uiMode, setUiMode] = useState(() => {
+    try { return localStorage.getItem('nexus_ui_mode') || 'wa'; } catch { return 'wa'; }
+  });
+
+  useEffect(() => {
+    const mode = uiMode === 'nexus' ? 'nexus' : 'wa';
+    document.documentElement.setAttribute('data-nexus-mode', mode);
+    try { localStorage.setItem('nexus_ui_mode', mode); } catch(e) {}
+  }, [uiMode]);
 
   useEffect(() => {
     if (!user || authLoading) return;
@@ -8763,7 +9208,7 @@ function App() {
   if (authLoading) return <div className="flex min-h-screen items-center justify-center text-sm text-slate-400">起動中...</div>;
   if (!user) return <AuthScreen sb={sb}/>;
 
-  const ctx = { sb, user, nav, back, navTo, currentRoute, store, storeLoaded, syncing, fetchTable, refreshAll };
+  const ctx = { sb, user, nav, back, navTo, currentRoute, store, storeLoaded, syncing, fetchTable, refreshAll, uiMode, setUiMode };
 
   const renderScreen = () => {
     const { screen, id } = currentRoute;
@@ -8802,7 +9247,7 @@ function App() {
       <AppShell currentScreen={currentRoute} navTo={navTo}>
         {renderScreen()}
       </AppShell>
-      {showStartup && <NexusStartup onSkip={()=>setShowStartup(false)} />}
+      {showStartup && <NexusStartup mode={uiMode} onSkip={()=>setShowStartup(false)} />}
     </Ctx.Provider>
   );
 }
