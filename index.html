@@ -595,6 +595,795 @@
       50% { opacity: .98; transform: translateX(-50%) scaleY(1.02); }
     }
 
+  
+    /* ─── NEXUS v7 CLEAN COMMAND UI ─── */
+    .nx-splash-v7 {
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 38%, rgba(56,189,248,.16), transparent 26%),
+        radial-gradient(circle at 50% 72%, rgba(14,165,233,.08), transparent 28%),
+        linear-gradient(180deg, #02040a 0%, #000 100%);
+      color: #eaf3ff;
+    }
+    .nx-splash-v7::before {
+      content:'';
+      position:absolute;
+      inset:-20%;
+      opacity:.11;
+      background-image:
+        linear-gradient(rgba(125,211,252,.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(125,211,252,.08) 1px, transparent 1px);
+      background-size:52px 52px;
+      transform: perspective(900px) rotateX(64deg) translateY(20%);
+    }
+    .nx-splash-v7::after {
+      content:'';
+      position:absolute;
+      inset:0;
+      background: radial-gradient(circle at 50% 46%, transparent 0 28%, rgba(0,0,0,.34) 72%);
+      pointer-events:none;
+    }
+    .nx-splash-v7-inner {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      justify-items: center;
+      padding: 32px;
+    }
+    .nx-coremark {
+      position: relative;
+      width: 126px;
+      height: 126px;
+      margin-bottom: 36px;
+      border-radius: 999px;
+      background:
+        radial-gradient(circle, #dff8ff 0 3px, #7dd3fc 4px 7px, rgba(56,189,248,.18) 8px 18px, transparent 19px),
+        conic-gradient(from 0deg, transparent 0 38deg, rgba(125,211,252,.94) 48deg, transparent 58deg, transparent 148deg, rgba(203,213,225,.62) 162deg, transparent 176deg, transparent 258deg, rgba(56,189,248,.75) 274deg, transparent 292deg),
+        radial-gradient(circle, rgba(15,23,42,.4), rgba(2,8,23,.95) 66%);
+      box-shadow:
+        0 0 0 1px rgba(125,211,252,.28),
+        inset 0 0 30px rgba(125,211,252,.12),
+        0 0 40px rgba(56,189,248,.28);
+      animation: nxCoreBreath 2.4s ease-in-out infinite;
+    }
+    .nx-coremark::before,
+    .nx-coremark::after {
+      content:'';
+      position:absolute;
+      border-radius:inherit;
+      border:1px solid rgba(125,211,252,.30);
+      inset:14px;
+    }
+    .nx-coremark::after {
+      inset:30px;
+      border-color: rgba(203,213,225,.30);
+    }
+    .nx-coremark-line {
+      position:absolute;
+      left:50%;
+      top:-28px;
+      width:2px;
+      height:182px;
+      transform:translateX(-50%);
+      border-radius:999px;
+      background:linear-gradient(180deg, transparent, rgba(125,211,252,.98), rgba(56,189,248,.72), transparent);
+      box-shadow:0 0 18px rgba(56,189,248,.56);
+      opacity:.88;
+    }
+    .nx-splash-wordmark {
+      font-size: 40px;
+      line-height: 1;
+      letter-spacing: .34em;
+      margin-right: -.34em;
+      font-weight: 500;
+      color: transparent;
+      background: linear-gradient(180deg, #fff 0%, #d6e4f3 45%, #617286 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      text-shadow: 0 0 22px rgba(56,189,248,.15);
+    }
+    .nx-splash-state {
+      margin-top: 18px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      letter-spacing: .32em;
+      margin-right: -.32em;
+      font-size: 13px;
+      color:#7dd3fc;
+      text-shadow:0 0 18px rgba(56,189,248,.42);
+    }
+    .nx-splash-tagline-v7 {
+      margin-top: 18px;
+      color: rgba(203,213,225,.62);
+      font-size: 12px;
+      letter-spacing: .16em;
+    }
+    .nx-home-v7 {
+      padding-bottom: 18px;
+    }
+    .nx-wordmark-v7 {
+      font-size: 34px;
+      line-height: 1;
+      letter-spacing: .28em;
+      margin-right: -.28em;
+      font-weight: 520;
+      color: transparent;
+      background: linear-gradient(180deg, #ffffff 0%, #dbeafe 44%, #64748b 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      text-shadow: 0 0 22px rgba(56,189,248,.13);
+    }
+    .nx-refresh-v7 {
+      display:grid;
+      place-items:center;
+      width:42px;
+      height:42px;
+      border-radius:999px;
+      border:1px solid rgba(125,211,252,.20);
+      background:rgba(3,8,18,.78);
+      color:#7dd3fc;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 0 18px rgba(56,189,248,.08);
+    }
+    .nx-status-v7 {
+      display:grid;
+      grid-template-columns: repeat(4,minmax(0,1fr));
+      gap:8px;
+      margin: 18px 0 16px;
+    }
+    .nx-status-pill-v7 {
+      min-height:58px;
+      border-radius:18px;
+      border:1px solid rgba(148,163,184,.14);
+      background:rgba(7,13,26,.78);
+      padding:10px 8px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .nx-status-pill-v7 .label {
+      font-size:9px;
+      letter-spacing:.08em;
+      color:rgba(203,213,225,.56);
+    }
+    .nx-status-pill-v7 .value {
+      margin-top:6px;
+      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+      font-size:15px;
+      line-height:1;
+      color:#7dd3fc;
+      text-shadow:0 0 12px rgba(56,189,248,.26);
+    }
+    .nx-primary-v7 {
+      position:relative;
+      overflow:hidden;
+      display:block;
+      width:100%;
+      min-height:184px;
+      border-radius:30px;
+      padding:22px;
+      text-align:left;
+      border:1px solid rgba(125,211,252,.24);
+      background:
+        radial-gradient(circle at 84% 36%, rgba(56,189,248,.20), transparent 26%),
+        linear-gradient(145deg, rgba(12,23,42,.94), rgba(3,8,18,.96));
+      box-shadow:
+        0 18px 48px rgba(0,0,0,.36),
+        inset 0 1px 0 rgba(255,255,255,.07),
+        0 0 26px rgba(56,189,248,.09);
+    }
+    .nx-primary-v7::before {
+      content:'';
+      position:absolute;
+      right:-34px;
+      top:24px;
+      width:154px;
+      height:154px;
+      border-radius:999px;
+      background:
+        radial-gradient(circle, #7dd3fc 0 3px, rgba(56,189,248,.22) 4px 17px, transparent 18px),
+        conic-gradient(from 0deg, transparent 0 28deg, rgba(125,211,252,.66) 42deg, transparent 58deg, rgba(203,213,225,.30) 134deg, transparent 164deg, rgba(56,189,248,.56) 248deg, transparent 286deg);
+      opacity:.84;
+      box-shadow:0 0 36px rgba(56,189,248,.22);
+    }
+    .nx-primary-v7::after {
+      content:'';
+      position:absolute;
+      left:22px;
+      bottom:30px;
+      width:146px;
+      height:1px;
+      background:linear-gradient(90deg, #7dd3fc, transparent);
+      box-shadow:0 0 12px rgba(56,189,248,.55);
+    }
+    .nx-kicker-v7 {
+      font-size:11px;
+      letter-spacing:.22em;
+      color:rgba(125,211,252,.72);
+      font-weight:700;
+    }
+    .nx-title-v7 {
+      margin-top:18px;
+      font-size:44px;
+      line-height:1;
+      font-weight:650;
+      color:#eef7ff;
+      letter-spacing:-.04em;
+    }
+    .nx-sub-v7 {
+      margin-top:10px;
+      color:rgba(203,213,225,.72);
+      font-size:14px;
+    }
+    .nx-secondary-grid-v7 {
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:12px;
+      margin-top:12px;
+    }
+    .nx-secondary-v7 {
+      min-height:126px;
+      border-radius:24px;
+      padding:16px;
+      text-align:left;
+      border:1px solid rgba(148,163,184,.16);
+      background:
+        radial-gradient(circle at 78% 80%, rgba(56,189,248,.12), transparent 38%),
+        linear-gradient(145deg, rgba(10,20,36,.92), rgba(3,8,18,.94));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .nx-secondary-v7 .name {
+      font-size:24px;
+      font-weight:650;
+      color:#eef7ff;
+      letter-spacing:-.04em;
+    }
+    .nx-secondary-v7 .desc {
+      margin-top:8px;
+      font-size:12px;
+      color:rgba(203,213,225,.60);
+    }
+    .nx-mini-line {
+      margin-top:24px;
+      width:70px;
+      height:1px;
+      background:linear-gradient(90deg,#7dd3fc,transparent);
+      box-shadow:0 0 10px rgba(56,189,248,.46);
+    }
+    .nx-modules-v7 {
+      display:grid;
+      grid-template-columns:repeat(5,minmax(0,1fr));
+      gap:8px;
+      margin-top:12px;
+    }
+    .nx-module-v7 {
+      min-height:84px;
+      border-radius:20px;
+      padding:10px 6px;
+      display:grid;
+      justify-items:center;
+      align-content:center;
+      border:1px solid rgba(148,163,184,.14);
+      background:rgba(7,13,26,.72);
+      color:#cbd5e1;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .nx-module-symbol-v7 {
+      width:34px;
+      height:34px;
+      display:grid;
+      place-items:center;
+      border-radius:13px;
+      border:1px solid rgba(125,211,252,.18);
+      color:#7dd3fc;
+      background:rgba(3,14,28,.78);
+      font-size:16px;
+      box-shadow:0 0 16px rgba(56,189,248,.08);
+    }
+    .nx-module-label-v7 {
+      margin-top:8px;
+      font-size:10px;
+      color:rgba(226,232,240,.78);
+    }
+    .nx-section-head-v7 {
+      margin-top:20px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+    .nx-section-head-v7 span {
+      font-size:10px;
+      letter-spacing:.28em;
+      color:rgba(148,163,184,.72);
+    }
+    .nx-section-head-v7 div {
+      height:1px;
+      flex:1;
+      background:linear-gradient(90deg,rgba(125,211,252,.24),transparent);
+    }
+    .nx-alert-v7 {
+      width:100%;
+      margin-bottom:12px;
+      border-radius:22px;
+      border:1px solid rgba(251,113,133,.22);
+      background:linear-gradient(145deg, rgba(45,12,25,.74), rgba(5,8,18,.92));
+      padding:13px 16px;
+      text-align:left;
+    }
+    .nx-alert-v7 .head {
+      font-size:11px;
+      letter-spacing:.20em;
+      color:#fda4af;
+      font-weight:800;
+    }
+    .nx-timeline-v7 {
+      display:grid;
+      grid-template-columns:repeat(5,minmax(0,1fr));
+      gap:8px;
+      margin-top:12px;
+    }
+    .nx-tile-v7 {
+      min-height:70px;
+      border-radius:18px;
+      padding:10px 8px;
+      text-align:left;
+      border:1px solid rgba(148,163,184,.13);
+      background:rgba(7,13,26,.66);
+    }
+    @keyframes nxCoreBreath {
+      0%,100% { transform:scale(.985); filter:brightness(.98); }
+      50% { transform:scale(1.012); filter:brightness(1.08); }
+    }
+
+  
+    /* ─── NEXUS v8 PREMIUM COMMAND CENTER ─── */
+    .nx8-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 26%, rgba(56,189,248,.14), transparent 24%),
+        radial-gradient(circle at 50% 68%, rgba(14,165,233,.08), transparent 30%),
+        linear-gradient(180deg, #03050b 0%, #010205 100%);
+    }
+    .nx8-splash::before {
+      content:'';
+      position:absolute;
+      inset:-24%;
+      opacity:.08;
+      background-image:
+        linear-gradient(rgba(125,211,252,.09) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(125,211,252,.09) 1px, transparent 1px);
+      background-size: 46px 46px;
+      transform: perspective(900px) rotateX(66deg) translateY(22%);
+    }
+    .nx8-splash::after {
+      content:'';
+      position:absolute;
+      inset:0;
+      background: radial-gradient(circle at 50% 50%, transparent 0 34%, rgba(0,0,0,.42) 100%);
+      pointer-events:none;
+    }
+    .nx8-splash-inner {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      justify-items: center;
+      padding: 24px;
+    }
+    .nx8-reactor {
+      position: relative;
+      width: 152px;
+      height: 152px;
+      margin-bottom: 34px;
+      border-radius: 999px;
+      filter: drop-shadow(0 0 28px rgba(56,189,248,.22));
+    }
+    .nx8-reactor::before,
+    .nx8-reactor::after {
+      content:'';
+      position:absolute;
+      inset:0;
+      border-radius: inherit;
+    }
+    .nx8-reactor::before {
+      background:
+        radial-gradient(circle, rgba(255,255,255,.98) 0 3px, rgba(125,211,252,.96) 4px 9px, rgba(56,189,248,.20) 10px 19px, transparent 20px),
+        conic-gradient(from 0deg,
+          transparent 0 18deg, rgba(125,211,252,.84) 28deg, transparent 40deg,
+          transparent 82deg, rgba(203,213,225,.56) 96deg, transparent 112deg,
+          transparent 172deg, rgba(56,189,248,.72) 188deg, transparent 204deg,
+          transparent 258deg, rgba(203,213,225,.46) 274deg, transparent 292deg);
+      box-shadow:
+        inset 0 0 42px rgba(125,211,252,.12),
+        0 0 0 1px rgba(125,211,252,.20);
+      animation: nx8Rotate 14s linear infinite;
+    }
+    .nx8-reactor::after {
+      inset: 18px;
+      border: 1px solid rgba(125,211,252,.28);
+      box-shadow:
+        inset 0 0 24px rgba(56,189,248,.09),
+        0 0 0 18px rgba(125,211,252,.03),
+        0 0 0 36px rgba(125,211,252,.02);
+    }
+    .nx8-reactor-core {
+      position:absolute;
+      inset: 44px;
+      border-radius: 999px;
+      border: 1px solid rgba(203,213,225,.34);
+      background:
+        radial-gradient(circle at 50% 50%, #e8fbff 0 4px, rgba(125,211,252,.92) 5px 9px, rgba(56,189,248,.24) 10px 20px, transparent 21px),
+        radial-gradient(circle at 50% 50%, rgba(255,255,255,.06), rgba(2,8,18,.96) 76%);
+      box-shadow: inset 0 0 18px rgba(125,211,252,.12);
+    }
+    .nx8-reactor-axis {
+      position:absolute;
+      left:50%;
+      top:-12px;
+      width:2px;
+      height:176px;
+      transform:translateX(-50%);
+      background: linear-gradient(180deg, transparent, rgba(125,211,252,.94), rgba(56,189,248,.74), transparent);
+      box-shadow: 0 0 18px rgba(56,189,248,.42);
+      opacity:.92;
+    }
+    .nx8-reactor-scan {
+      position:absolute;
+      inset:-8px;
+      border-radius:999px;
+      background: conic-gradient(from 0deg, transparent 0 26deg, rgba(125,211,252,.18) 34deg, transparent 44deg);
+      mix-blend-mode: screen;
+      animation: nx8Rotate 3.8s linear infinite;
+    }
+    .nx8-splash-mark {
+      font-size: 38px;
+      line-height:1;
+      letter-spacing: .36em;
+      margin-right: -.36em;
+      font-weight: 520;
+      color: transparent;
+      background: linear-gradient(180deg, #ffffff 0%, #dbeafe 44%, #64748b 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      text-shadow: 0 0 18px rgba(56,189,248,.12);
+    }
+    .nx8-splash-online {
+      margin-top: 16px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      letter-spacing: .36em;
+      margin-right: -.36em;
+      color: #7dd3fc;
+      text-shadow: 0 0 18px rgba(56,189,248,.36);
+    }
+    .nx8-splash-tagline {
+      margin-top: 16px;
+      font-size: 11px;
+      letter-spacing: .18em;
+      color: rgba(203,213,225,.62);
+    }
+
+    .nx8-home {
+      padding-bottom: 18px;
+    }
+    .nx8-topbar {
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:14px;
+    }
+    .nx8-mark {
+      font-size: 34px;
+      line-height: 1;
+      letter-spacing: .28em;
+      margin-right: -.28em;
+      font-weight: 520;
+      color: transparent;
+      background: linear-gradient(180deg, #ffffff 0%, #dbeafe 44%, #64748b 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      text-shadow: 0 0 18px rgba(56,189,248,.10);
+    }
+    .nx8-tag {
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      margin-top: 12px;
+      border-radius:999px;
+      border:1px solid rgba(125,211,252,.18);
+      background: rgba(5,12,24,.62);
+      padding: 7px 10px;
+      font-size: 10px;
+      letter-spacing: .16em;
+      color: rgba(125,211,252,.84);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .nx8-dot {
+      width:6px; height:6px; border-radius:999px;
+      background:#7dd3fc;
+      box-shadow:0 0 12px rgba(56,189,248,.48);
+    }
+    .nx8-refresh {
+      display:grid;
+      place-items:center;
+      width:44px; height:44px; border-radius:999px;
+      border:1px solid rgba(125,211,252,.18);
+      background: rgba(5,12,24,.72);
+      color:#7dd3fc;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 0 18px rgba(56,189,248,.08);
+    }
+
+    .nx8-commandbar {
+      margin-top: 18px;
+      display:grid;
+      grid-template-columns: repeat(4,minmax(0,1fr));
+      gap:10px;
+    }
+    .nx8-metric {
+      border-radius:18px;
+      border:1px solid rgba(148,163,184,.14);
+      background: linear-gradient(145deg, rgba(8,14,28,.88), rgba(3,8,18,.90));
+      padding: 11px 10px 10px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .nx8-metric-label {
+      font-size: 9px;
+      letter-spacing: .10em;
+      color: rgba(203,213,225,.54);
+    }
+    .nx8-metric-value {
+      margin-top: 7px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 15px;
+      line-height: 1;
+      color: #7dd3fc;
+      text-shadow: 0 0 10px rgba(56,189,248,.24);
+    }
+    .nx8-alert {
+      margin-top: 14px;
+      width:100%;
+      text-align:left;
+      border-radius: 22px;
+      border:1px solid rgba(251,113,133,.20);
+      background: linear-gradient(145deg, rgba(48,14,26,.58), rgba(6,9,18,.90));
+      padding: 14px 16px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+    }
+    .nx8-alert-head {
+      font-size: 11px;
+      letter-spacing: .20em;
+      font-weight: 800;
+      color: #fda4af;
+    }
+    .nx8-alert-body {
+      margin-top: 8px;
+      font-size: 12px;
+      color: rgba(226,232,240,.82);
+      line-height: 1.5;
+    }
+
+    .nx8-primary {
+      position: relative;
+      overflow: hidden;
+      margin-top: 14px;
+      width:100%;
+      min-height: 212px;
+      border-radius: 30px;
+      border:1px solid rgba(125,211,252,.22);
+      background:
+        radial-gradient(circle at 82% 36%, rgba(56,189,248,.16), transparent 24%),
+        linear-gradient(145deg, rgba(10,18,34,.96), rgba(3,8,18,.96));
+      padding: 22px;
+      text-align:left;
+      box-shadow:
+        0 20px 48px rgba(0,0,0,.34),
+        inset 0 1px 0 rgba(255,255,255,.06),
+        0 0 22px rgba(56,189,248,.08);
+    }
+    .nx8-primary::before {
+      content:'';
+      position:absolute;
+      right:-30px;
+      top:18px;
+      width:178px;
+      height:178px;
+      border-radius: 999px;
+      background:
+        radial-gradient(circle, rgba(255,255,255,.98) 0 2px, rgba(125,211,252,.92) 3px 7px, rgba(56,189,248,.18) 8px 15px, transparent 16px),
+        conic-gradient(from 0deg, transparent 0 22deg, rgba(125,211,252,.62) 36deg, transparent 46deg, transparent 132deg, rgba(203,213,225,.32) 146deg, transparent 160deg, transparent 242deg, rgba(56,189,248,.52) 258deg, transparent 276deg);
+      box-shadow:
+        inset 0 0 24px rgba(125,211,252,.08),
+        0 0 30px rgba(56,189,248,.18);
+      opacity:.95;
+    }
+    .nx8-primary::after {
+      content:'';
+      position:absolute;
+      left:22px;
+      bottom:32px;
+      width:150px;
+      height:1px;
+      background: linear-gradient(90deg, rgba(125,211,252,.86), transparent);
+      box-shadow: 0 0 10px rgba(56,189,248,.32);
+    }
+    .nx8-kicker {
+      font-size: 10px;
+      letter-spacing: .22em;
+      color: rgba(125,211,252,.74);
+      font-weight: 700;
+    }
+    .nx8-primary-title {
+      margin-top: 18px;
+      font-size: 44px;
+      line-height: 1;
+      font-weight: 650;
+      letter-spacing: -.04em;
+      color: #f8fbff;
+    }
+    .nx8-primary-copy {
+      margin-top: 10px;
+      max-width: 60%;
+      font-size: 14px;
+      line-height: 1.6;
+      color: rgba(203,213,225,.72);
+    }
+    .nx8-pulse {
+      position:absolute;
+      right: 44px;
+      top: 80px;
+      width: 94px;
+      height: 94px;
+      border-radius: 999px;
+      border: 1px solid rgba(125,211,252,.28);
+      box-shadow:
+        0 0 0 14px rgba(125,211,252,.03),
+        0 0 0 28px rgba(125,211,252,.02);
+    }
+
+    .nx8-grid {
+      display:grid;
+      grid-template-columns: repeat(2,minmax(0,1fr));
+      gap:12px;
+      margin-top:12px;
+    }
+    .nx8-card {
+      min-height: 138px;
+      border-radius: 24px;
+      border:1px solid rgba(148,163,184,.14);
+      background:
+        radial-gradient(circle at 82% 78%, rgba(56,189,248,.10), transparent 36%),
+        linear-gradient(145deg, rgba(8,16,30,.92), rgba(3,8,18,.94));
+      padding: 16px;
+      text-align:left;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .nx8-card-title {
+      font-size: 24px;
+      line-height:1;
+      font-weight: 650;
+      letter-spacing: -.04em;
+      color: #f3f8ff;
+    }
+    .nx8-card-copy {
+      margin-top: 8px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: rgba(203,213,225,.60);
+    }
+    .nx8-card-art {
+      position: relative;
+      margin-top: 18px;
+      width: 76px;
+      height: 14px;
+      background: linear-gradient(90deg, rgba(125,211,252,.92), transparent);
+      box-shadow: 0 0 8px rgba(56,189,248,.24);
+    }
+    .nx8-card-art::before {
+      content:'';
+      position:absolute;
+      right:-4px;
+      top:-20px;
+      width:42px;
+      height:42px;
+      border-radius: 999px;
+      border:1px solid rgba(125,211,252,.24);
+      box-shadow: 0 0 0 10px rgba(125,211,252,.02), inset 0 0 12px rgba(125,211,252,.06);
+    }
+    .nx8-card.gateway .nx8-card-art::before { top:-10px; right:0; width:36px; height:36px; }
+    .nx8-card.gateway .nx8-card-art { width: 56px; }
+    .nx8-card.insight .nx8-card-art::before { width:46px; height:46px; }
+
+    .nx8-section {
+      margin-top: 18px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+    .nx8-section-label {
+      font-size: 10px;
+      letter-spacing: .28em;
+      color: rgba(148,163,184,.72);
+    }
+    .nx8-section-line {
+      height:1px;
+      flex:1;
+      background: linear-gradient(90deg, rgba(125,211,252,.22), transparent);
+    }
+
+    .nx8-modules {
+      display:grid;
+      grid-template-columns: repeat(5,minmax(0,1fr));
+      gap:8px;
+      margin-top: 12px;
+    }
+    .nx8-module {
+      min-height: 86px;
+      border-radius: 20px;
+      border:1px solid rgba(148,163,184,.12);
+      background: linear-gradient(145deg, rgba(8,14,28,.78), rgba(3,8,18,.82));
+      display:grid;
+      justify-items:center;
+      align-content:center;
+      padding:10px 6px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+      text-align:center;
+    }
+    .nx8-module-glyph {
+      width:36px; height:36px;
+      border-radius: 13px;
+      display:grid; place-items:center;
+      border:1px solid rgba(125,211,252,.18);
+      background: rgba(3,12,24,.86);
+      color:#7dd3fc;
+      font-size: 15px;
+      box-shadow: 0 0 16px rgba(56,189,248,.06);
+    }
+    .nx8-module-label {
+      margin-top: 8px;
+      font-size: 10px;
+      color: rgba(226,232,240,.78);
+    }
+
+    .nx8-timeline {
+      display:grid;
+      grid-template-columns: repeat(5,minmax(0,1fr));
+      gap:8px;
+      margin-top:12px;
+    }
+    .nx8-tile {
+      min-height: 74px;
+      border-radius: 18px;
+      border:1px solid rgba(148,163,184,.12);
+      background: rgba(7,13,26,.64);
+      padding:10px 8px;
+      text-align:left;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+    }
+    .nx8-tile-day {
+      font-size: 10px;
+      color: rgba(125,211,252,.86);
+    }
+    .nx8-tile-copy {
+      margin-top: 6px;
+      font-size: 10px;
+      line-height: 1.4;
+      color: rgba(203,213,225,.76);
+    }
+
+    @keyframes nx8Rotate { to { transform: rotate(360deg); } }
+    @media (max-width: 390px) {
+      .nx8-primary-copy { max-width: 64%; }
+      .nx8-primary-title { font-size: 40px; }
+      .nx8-mark, .nx8-splash-mark { font-size: 31px; }
+      .nx8-commandbar { gap:8px; }
+      .nx8-modules, .nx8-timeline { gap:6px; }
+    }
+
   </style>
 </head>
 <body class="bg-[#F2F2F7] text-slate-900 min-h-screen">
@@ -1116,29 +1905,16 @@ function AuthScreen({ sb }) {
 // ─── NEXUS DARK COMMAND COMPONENTS ────────────────────────
 function NexusStartup({ onSkip }) {
   return (
-    <button className="nx-splash text-center" onClick={onSkip} aria-label="Skip startup">
-      <span className="nx-splash-flare" />
-      {[...Array(16)].map((_,i)=>(
-        <span key={i} className="nx-particle" style={{
-          left: `${8 + (i*17)%84}%`, top: `${10 + (i*31)%76}%`, animationDelay: `${(i%6)*.22}s`
-        }} />
-      ))}
-      <div className="relative z-10 px-8">
-        <div className="nx-boot-stage">
-          <span className="nx-boot-halo" />
-          <span className="nx-boot-ring r1" />
-          <span className="nx-boot-ring r2" />
-          <span className="nx-boot-ring r3" />
-          <div className="nx-boot-logo-wrap">
-            <img src={typeof NEXUS_LOGO !== 'undefined' ? NEXUS_LOGO : NEXUS_REF_ICON} alt="" className="nx-boot-logo" />
-          </div>
-          <span className="nx-boot-scan" />
-          <span className="nx-boot-line" />
+    <button className="nx8-splash" onClick={onSkip} aria-label="Skip startup">
+      <div className="nx8-splash-inner">
+        <div className="nx8-reactor">
+          <div className="nx8-reactor-axis" />
+          <div className="nx8-reactor-core" />
+          <div className="nx8-reactor-scan" />
         </div>
-        <div className="nx-splash-title nx-metal-text text-[34px] font-semibold tracking-[.08em]">Access Granted</div>
-        <div className="nx-splash-online nx-blue-text mt-5 font-mono text-[16px] tracking-[.42em]">NEXUS ONLINE</div>
-        <div className="mt-5 text-xs tracking-[.22em] text-slate-400">Think. Decide. Evolve.</div>
-        <div className="mx-auto mt-9 h-px w-40 bg-gradient-to-r from-transparent via-sky-400/80 to-transparent" />
+        <div className="nx8-splash-mark">NEXUS</div>
+        <div className="nx8-splash-online">SYSTEM ONLINE</div>
+        <div className="nx8-splash-tagline">Think. Decide. Evolve.</div>
       </div>
     </button>
   );
@@ -1256,77 +2032,128 @@ function HomeScreen() {
 
   const staffFollow = useMemo(() => {
     const t = new Date(); t.setHours(0,0,0,0);
-    const daysSince = (iso) => { if (!iso) return 999; const d=new Date(iso); d.setHours(0,0,0,0); return Math.round((t-d)/86400000); };
-    const daysUntilDate = (iso) => { if (!iso) return null; const d=new Date(iso); d.setHours(0,0,0,0); return Math.round((d-t)/86400000); };
+    const daysSince = (iso) => {
+      if (!iso) return 999;
+      const d = new Date(iso); d.setHours(0,0,0,0);
+      return Math.round((t-d)/86400000);
+    };
+    const daysUntilDate = (iso) => {
+      if (!iso) return null;
+      const d = new Date(iso); d.setHours(0,0,0,0);
+      return Math.round((d-t)/86400000);
+    };
     const active = (store.staff||[]).filter(s => s.is_active);
     const needsEdu = active.filter(s => s.is_education_target !== false && daysSince(s.last_education_at) >= 14);
     const needsIv  = active.filter(s => s.is_interview_target !== false && daysSince(s.last_interview_at) >= 30);
-    const edNoSched   = needsEdu.filter(s => !s.next_education_at);
-    const ivNoSched   = needsIv.filter(s => !s.next_interview_at);
-    const weekEvents = (store.schedules||[]).filter(s=>s.status==='todo').flatMap(s => {
-      const du = daysUntilDate(s.scheduled_date);
-      if (du === null || du < 0 || du > 4) return [];
-      return [{ title:s.title, type:s.category||'task', assignee:s.assignee||'', date:s.scheduled_date, daysUntil:du }];
-    }).sort((a,b)=>a.daysUntil-b.daysUntil);
+    const edNoSched = needsEdu.filter(s => !s.next_education_at);
+    const ivNoSched = needsIv.filter(s => !s.next_interview_at);
+    const weekEvents = (store.schedules||[])
+      .filter(s => s.status === 'todo')
+      .flatMap(s => {
+        const du = daysUntilDate(s.scheduled_date);
+        if (du === null || du < 0 || du > 4) return [];
+        return [{ title:s.title, date:s.scheduled_date, daysUntil:du }];
+      })
+      .sort((a,b)=>a.daysUntil-b.daysUntil);
     return { edNoSched, ivNoSched, weekEvents };
   }, [store.staff, store.schedules]);
 
-  const today = new Date().toLocaleDateString('en-US',{timeZone:'Asia/Tokyo',month:'short',day:'numeric',weekday:'short'});
   const queueCount = staffFollow.edNoSched.length + staffFollow.ivNoSched.length + staffFollow.weekEvents.length;
+  const topAlert = [
+    staffFollow.edNoSched.length ? `Education: ${staffFollow.edNoSched.map(s=>s.name).slice(0,2).join(' / ')}` : '',
+    staffFollow.ivNoSched.length ? `Interview: ${staffFollow.ivNoSched.map(s=>s.name).slice(0,2).join(' / ')}` : ''
+  ].filter(Boolean).join('  •  ');
 
   if (loading) return <LoadingState/>;
-  return (
-    <>
-      <NexusHeader syncing={syncing} onRefresh={()=>refreshAll(false)} />
 
-      <div className="nx-glass mb-4 grid grid-cols-4 rounded-[22px] p-3">
-        <NexusMetric label="Status" value="ONLINE" detail="⌁⌁⌁" />
-        <NexusMetric label="Queue" value={String(queueCount).padStart(2,'0')} detail="••••" />
-        <NexusMetric label="Timeline" value="Today" detail={today} />
-        <NexusMetric label="Signal" value={queueCount > 0 ? 'ACTIVE' : 'CLEAR'} detail={queueCount > 0 ? 'SCAN' : 'IDLE'} />
+  return (
+    <div className="nx8-home">
+      <div className="nx8-topbar">
+        <div>
+          <div className="nx8-mark">NEXUS</div>
+          <div className="nx8-tag"><span className="nx8-dot" /> COMMAND CENTER</div>
+        </div>
+        <button onClick={()=>refreshAll(false)} disabled={syncing} className="nx8-refresh">
+          <Repeat2Icon size={18} className={syncing ? 'animate-spin' : ''} />
+        </button>
       </div>
 
-      {(staffFollow.edNoSched.length > 0 || staffFollow.ivNoSched.length > 0) && (
-        <button onClick={()=>nav('staff')} className="nx-glass mb-3 w-full rounded-[20px] border border-rose-400/25 p-3 text-left">
-          <div className="text-xs font-bold tracking-[.18em] text-rose-300">QUEUE ALERT</div>
-          {staffFollow.edNoSched.length > 0 && <div className="mt-1 text-xs text-slate-300">Education: {staffFollow.edNoSched.map(s=>s.name).join(' / ')}</div>}
-          {staffFollow.ivNoSched.length > 0 && <div className="mt-1 text-xs text-slate-300">Interview: {staffFollow.ivNoSched.map(s=>s.name).join(' / ')}</div>}
+      <div className="nx8-commandbar">
+        <div className="nx8-metric"><div className="nx8-metric-label">Status</div><div className="nx8-metric-value">ONLINE</div></div>
+        <div className="nx8-metric"><div className="nx8-metric-label">Queue</div><div className="nx8-metric-value">{String(queueCount).padStart(2,'0')}</div></div>
+        <div className="nx8-metric"><div className="nx8-metric-label">Timeline</div><div className="nx8-metric-value">TODAY</div></div>
+        <div className="nx8-metric"><div className="nx8-metric-label">Signal</div><div className="nx8-metric-value">{queueCount > 0 ? 'ACTIVE' : 'CLEAR'}</div></div>
+      </div>
+
+      {topAlert && (
+        <button onClick={()=>nav('staff')} className="nx8-alert">
+          <div className="nx8-alert-head">QUEUE ALERT</div>
+          <div className="nx8-alert-body">{topAlert}</div>
         </button>
       )}
 
-      <NexusHeroCard title="Oracle" subtitle="Turn voice into knowledge" onClick={()=>nav('echo')} />
+      <button onClick={()=>nav('echo')} className="nx8-primary active:scale-[.99]">
+        <div className="nx8-kicker">PRIMARY MODULE</div>
+        <div className="nx8-primary-title">Oracle</div>
+        <div className="nx8-primary-copy">Turn voice into knowledge. Create sharp meeting and education shareouts with one action.</div>
+        <div className="nx8-pulse" />
+      </button>
 
-      <div className="mb-4 grid grid-cols-2 gap-3">
-        <NexusActionCard title="Gateway" subtitle="Route every input" type="gateway" onClick={()=>nav('inputhub')} />
-        <NexusActionCard title="Insight" subtitle="Reveal the pattern" type="insight" onClick={()=>nav('review')} />
+      <div className="nx8-grid">
+        <button onClick={()=>nav('inputhub')} className="nx8-card gateway active:scale-[.99]">
+          <div className="nx8-card-title">Gateway</div>
+          <div className="nx8-card-copy">Route every input into the right flow.</div>
+          <div className="nx8-card-art" />
+        </button>
+        <button onClick={()=>nav('review')} className="nx8-card insight active:scale-[.99]">
+          <div className="nx8-card-title">Insight</div>
+          <div className="nx8-card-copy">Reveal patterns from weekly and monthly review.</div>
+          <div className="nx8-card-art" />
+        </button>
       </div>
 
-      <div className="mb-3 flex items-center gap-3">
-        <div className="text-[11px] font-medium tracking-[.34em] text-slate-500">MODULES</div>
-        <div className="h-px flex-1 bg-gradient-to-r from-slate-600/60 to-transparent" />
-      </div>
-      <div className="grid grid-cols-5 gap-2">
-        <NexusModuleTile title="Initiate" onClick={()=>nav('capture')} />
-        <NexusModuleTile title="Forge" onClick={()=>setShowForge(true)} />
-        <NexusModuleTile title="Chronos" onClick={()=>nav('calendar')} />
-        <NexusModuleTile title="Vault" onClick={()=>nav('logs')} />
-        <NexusModuleTile title="Codex" onClick={()=>nav('skills')} />
+      <div className="nx8-section">
+        <div className="nx8-section-label">MODULES</div>
+        <div className="nx8-section-line" />
       </div>
 
-      <div className="mt-5 grid grid-cols-5 gap-2">
+      <div className="nx8-modules">
+        <button className="nx8-module active:scale-[.98]" onClick={()=>nav('capture')}>
+          <div className="nx8-module-glyph">△</div><div className="nx8-module-label">Initiate</div>
+        </button>
+        <button className="nx8-module active:scale-[.98]" onClick={()=>setShowForge(true)}>
+          <div className="nx8-module-glyph">⌘</div><div className="nx8-module-label">Forge</div>
+        </button>
+        <button className="nx8-module active:scale-[.98]" onClick={()=>nav('calendar')}>
+          <div className="nx8-module-glyph">◷</div><div className="nx8-module-label">Chronos</div>
+        </button>
+        <button className="nx8-module active:scale-[.98]" onClick={()=>nav('logs')}>
+          <div className="nx8-module-glyph">▣</div><div className="nx8-module-label">Vault</div>
+        </button>
+        <button className="nx8-module active:scale-[.98]" onClick={()=>nav('skills')}>
+          <div className="nx8-module-glyph">◇</div><div className="nx8-module-label">Codex</div>
+        </button>
+      </div>
+
+      <div className="nx8-section">
+        <div className="nx8-section-label">TIMELINE</div>
+        <div className="nx8-section-line" />
+      </div>
+
+      <div className="nx8-timeline">
         {staffFollow.weekEvents.slice(0,5).map((e,i)=>(
-          <button key={i} onClick={()=>nav('calendar')} className="nx-glass min-h-[74px] rounded-[18px] p-2 text-left">
-            <div className="text-[10px] text-sky-300">{e.daysUntil===0?'TODAY':`+${e.daysUntil}D`}</div>
-            <div className="mt-1 line-clamp-2 text-[10px] leading-tight text-slate-300">{e.title}</div>
+          <button key={i} onClick={()=>nav('calendar')} className="nx8-tile active:scale-[.98]">
+            <div className="nx8-tile-day">{e.daysUntil===0 ? 'TODAY' : `+${e.daysUntil}D`}</div>
+            <div className="nx8-tile-copy line-clamp-2">{e.title}</div>
           </button>
         ))}
         {staffFollow.weekEvents.length === 0 && (
-          <div className="col-span-5 nx-glass rounded-[18px] p-4 text-center text-xs text-slate-500">Timeline clear</div>
+          <div className="col-span-5 nx8-tile grid place-items-center text-center text-xs text-slate-500">Timeline clear</div>
         )}
       </div>
 
-      {showForge && <SkillForge skills={skills} onClose={()=>setShowForge(false)}/>}    
-    </>
+      {showForge && <SkillForge skills={skills} onClose={()=>setShowForge(false)} />}
+    </div>
   );
 }
 
@@ -7621,7 +8448,7 @@ function App() {
   useEffect(() => {
     if (!user || authLoading) return;
     setShowStartup(true);
-    const t = setTimeout(() => setShowStartup(false), 1500);
+    const t = setTimeout(() => setShowStartup(false), 1100);
     return () => clearTimeout(t);
   }, [user?.id, authLoading]);
 
