@@ -2107,6 +2107,189 @@
       color: #eee9dd;
     }
 
+  
+    /* ─── NEXUS v12 QUEUE DETAIL ─── */
+    .nx12-metric-button {
+      position: relative;
+      width: 100%;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color .18s ease, background .18s ease, transform .12s ease;
+    }
+    .nx12-metric-button:active {
+      transform: scale(.98);
+    }
+    .nx12-metric-button::after {
+      content: '›';
+      position: absolute;
+      right: 9px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: rgba(125,211,252,.62);
+      font-size: 17px;
+      line-height: 1;
+    }
+    .nx12-metric-button:hover,
+    .nx12-metric-button:focus-visible {
+      border-color: rgba(125,211,252,.30);
+      background:
+        radial-gradient(circle at 88% 18%, rgba(56,189,248,.08), transparent 36%),
+        linear-gradient(145deg, rgba(10,19,35,.92), rgba(3,8,18,.94));
+      outline: none;
+    }
+    html[data-nexus-mode="wa"] .nx12-metric-button::after {
+      color: rgba(154,177,201,.70);
+    }
+    html[data-nexus-mode="wa"] .nx12-metric-button:hover,
+    html[data-nexus-mode="wa"] .nx12-metric-button:focus-visible {
+      border-color: rgba(107,137,169,.30);
+      background:
+        radial-gradient(circle at 88% 18%, rgba(58,82,111,.14), transparent 36%),
+        linear-gradient(145deg, rgba(30,34,40,.92), rgba(14,16,19,.94));
+    }
+
+    .nx12-queue-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 8px;
+    }
+    .nx12-queue-summary-card {
+      border-radius: 16px;
+      border: 1px solid rgba(148,163,184,.13);
+      background: rgba(7,13,26,.68);
+      padding: 12px 10px;
+      text-align: center;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+    }
+    .nx12-queue-summary-num {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 22px;
+      line-height: 1;
+      color: #7dd3fc;
+    }
+    .nx12-queue-summary-label {
+      margin-top: 7px;
+      font-size: 10px;
+      line-height: 1.35;
+      color: rgba(203,213,225,.66);
+    }
+    .nx12-queue-group {
+      overflow: hidden;
+      border-radius: 20px;
+      border: 1px solid rgba(148,163,184,.13);
+      background: linear-gradient(145deg, rgba(8,15,29,.82), rgba(3,8,18,.88));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+    }
+    .nx12-queue-group-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 15px;
+      border-bottom: 1px solid rgba(148,163,184,.10);
+    }
+    .nx12-queue-group-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #eef6ff;
+    }
+    .nx12-queue-count {
+      min-width: 28px;
+      border-radius: 999px;
+      padding: 3px 8px;
+      text-align: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      color: #7dd3fc;
+      background: rgba(56,189,248,.10);
+      border: 1px solid rgba(125,211,252,.14);
+    }
+    .nx12-queue-row {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 15px;
+      text-align: left;
+      border-top: 1px solid rgba(148,163,184,.08);
+      transition: background .16s ease;
+    }
+    .nx12-queue-row:first-child {
+      border-top: 0;
+    }
+    .nx12-queue-row:hover,
+    .nx12-queue-row:active {
+      background: rgba(56,189,248,.045);
+    }
+    .nx12-queue-row-main {
+      min-width: 0;
+      flex: 1;
+    }
+    .nx12-queue-row-title {
+      font-size: 13px;
+      font-weight: 650;
+      color: rgba(241,245,249,.94);
+    }
+    .nx12-queue-row-sub {
+      margin-top: 4px;
+      font-size: 11px;
+      line-height: 1.45;
+      color: rgba(203,213,225,.64);
+    }
+    .nx12-queue-chevron {
+      flex: 0 0 auto;
+      color: rgba(125,211,252,.58);
+    }
+    .nx12-queue-empty {
+      padding: 17px 15px;
+      font-size: 12px;
+      color: rgba(148,163,184,.70);
+    }
+    .nx12-queue-note {
+      border-radius: 16px;
+      border: 1px solid rgba(125,211,252,.12);
+      background: rgba(56,189,248,.045);
+      padding: 12px 14px;
+      font-size: 11px;
+      line-height: 1.65;
+      color: rgba(203,213,225,.72);
+    }
+
+    html[data-nexus-mode="wa"] .nx12-queue-summary-card,
+    html[data-nexus-mode="wa"] .nx12-queue-group {
+      border-color: rgba(151,157,162,.13);
+      background: linear-gradient(145deg, rgba(27,31,36,.88), rgba(14,16,19,.92));
+    }
+    html[data-nexus-mode="wa"] .nx12-queue-summary-num,
+    html[data-nexus-mode="wa"] .nx12-queue-count {
+      color: #9fb4c9;
+    }
+    html[data-nexus-mode="wa"] .nx12-queue-summary-label,
+    html[data-nexus-mode="wa"] .nx12-queue-row-sub,
+    html[data-nexus-mode="wa"] .nx12-queue-note {
+      color: rgba(231,226,214,.70);
+    }
+    html[data-nexus-mode="wa"] .nx12-queue-group-title,
+    html[data-nexus-mode="wa"] .nx12-queue-row-title {
+      color: #eee9dd;
+    }
+    html[data-nexus-mode="wa"] .nx12-queue-count {
+      background: rgba(58,82,111,.22);
+      border-color: rgba(112,139,169,.15);
+    }
+    html[data-nexus-mode="wa"] .nx12-queue-row:hover,
+    html[data-nexus-mode="wa"] .nx12-queue-row:active {
+      background: rgba(73,95,120,.08);
+    }
+    html[data-nexus-mode="wa"] .nx12-queue-chevron {
+      color: rgba(159,180,202,.62);
+    }
+    html[data-nexus-mode="wa"] .nx12-queue-note {
+      border-color: rgba(107,137,169,.14);
+      background: rgba(58,82,111,.10);
+    }
+
   </style>
 </head>
 <body class="bg-[#F2F2F7] text-slate-900 min-h-screen">
@@ -2806,11 +2989,112 @@ function NexusModuleTile({ title, type, onClick }) {
   );
 }
 
+function QueueDetailModal({ data, onClose, onOpenStaff, onOpenCalendar, uiMode='nexus' }) {
+  const wa = uiMode === 'wa';
+  const education = data.edNoSched || [];
+  const interviews = data.ivNoSched || [];
+  const schedules = data.weekEvents || [];
+  const total = education.length + interviews.length + schedules.length;
+
+  const openStaff = (staff) => {
+    onClose();
+    onOpenStaff(staff);
+  };
+  const openCalendar = () => {
+    onClose();
+    onOpenCalendar();
+  };
+
+  const StaffRows = ({ items, type }) => (
+    items.length > 0 ? items.map(staff => (
+      <button key={`${type}-${staff.id}`} className="nx12-queue-row" onClick={()=>openStaff(staff)}>
+        <div className="nx12-queue-row-main">
+          <div className="nx12-queue-row-title">{staff.name}</div>
+          <div className="nx12-queue-row-sub">
+            {type === 'education'
+              ? (wa ? '最終教育から14日以上経過・次回予定なし' : '14+ days since education / no next date')
+              : (wa ? '最終面談から30日以上経過・次回予定なし' : '30+ days since interview / no next date')}
+          </div>
+        </div>
+        <ChevronRightIcon size={16} className="nx12-queue-chevron"/>
+      </button>
+    )) : <div className="nx12-queue-empty">{wa ? '該当なし' : 'Nothing pending'}</div>
+  );
+
+  return (
+    <FullModal title={wa ? '未処理の確認' : 'Queue Details'} onClose={onClose}>
+      <div className="nx12-queue-note">
+        {wa
+          ? '未処理は「次回予定が未設定の教育・面談」と「4日以内の未完了予定」の合計です。項目を押すと、確認・対応する画面へ移動します。'
+          : 'Queue combines education/interview follow-ups without a next date and incomplete schedules due within four days.'}
+      </div>
+
+      <div className="nx12-queue-summary">
+        <div className="nx12-queue-summary-card">
+          <div className="nx12-queue-summary-num">{education.length}</div>
+          <div className="nx12-queue-summary-label">{wa ? '教育予定なし' : 'Education'}</div>
+        </div>
+        <div className="nx12-queue-summary-card">
+          <div className="nx12-queue-summary-num">{interviews.length}</div>
+          <div className="nx12-queue-summary-label">{wa ? '面談予定なし' : 'Interview'}</div>
+        </div>
+        <div className="nx12-queue-summary-card">
+          <div className="nx12-queue-summary-num">{schedules.length}</div>
+          <div className="nx12-queue-summary-label">{wa ? '直近の予定' : 'Schedules'}</div>
+        </div>
+      </div>
+
+      <div className="nx12-queue-group">
+        <div className="nx12-queue-group-head">
+          <div className="nx12-queue-group-title">{wa ? '教育フォロー' : 'Education Follow-up'}</div>
+          <div className="nx12-queue-count">{education.length}</div>
+        </div>
+        <StaffRows items={education} type="education"/>
+      </div>
+
+      <div className="nx12-queue-group">
+        <div className="nx12-queue-group-head">
+          <div className="nx12-queue-group-title">{wa ? '面談フォロー' : 'Interview Follow-up'}</div>
+          <div className="nx12-queue-count">{interviews.length}</div>
+        </div>
+        <StaffRows items={interviews} type="interview"/>
+      </div>
+
+      <div className="nx12-queue-group">
+        <div className="nx12-queue-group-head">
+          <div className="nx12-queue-group-title">{wa ? '4日以内の未完了予定' : 'Upcoming Schedules'}</div>
+          <div className="nx12-queue-count">{schedules.length}</div>
+        </div>
+        {schedules.length > 0 ? schedules.map((item, index) => (
+          <button key={`${item.date}-${index}`} className="nx12-queue-row" onClick={openCalendar}>
+            <div className="nx12-queue-row-main">
+              <div className="nx12-queue-row-title">{item.title || (wa ? '名称未設定の予定' : 'Untitled schedule')}</div>
+              <div className="nx12-queue-row-sub">
+                {item.daysUntil === 0
+                  ? (wa ? '本日' : 'Today')
+                  : (wa ? `${item.daysUntil}日後・${item.date}` : `In ${item.daysUntil} days · ${item.date}`)}
+              </div>
+            </div>
+            <ChevronRightIcon size={16} className="nx12-queue-chevron"/>
+          </button>
+        )) : <div className="nx12-queue-empty">{wa ? '該当なし' : 'Nothing pending'}</div>}
+      </div>
+
+      {total === 0 && (
+        <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/5 p-5 text-center text-sm text-emerald-200">
+          {wa ? '現在、未処理の項目はありません。' : 'Your queue is clear.'}
+        </div>
+      )}
+    </FullModal>
+  );
+}
+
 function HomeScreen() {
   const { nav, store, storeLoaded, syncing, refreshAll, uiMode, setUiMode } = useApp();
   const skills = store.skills;
   const loading = !storeLoaded;
   const [showForge, setShowForge] = useState(false);
+  const [showQueueDetail, setShowQueueDetail] = useState(false);
   const wa = uiMode === 'wa';
 
   const staffFollow = useMemo(() => {
@@ -2869,7 +3153,14 @@ function HomeScreen() {
 
       <div className="nx8-commandbar">
         <div className="nx8-metric"><div className="nx8-metric-label">{wa?'稼働':'Status'}</div><div className="nx8-metric-value">{wa?'稼働中':'ONLINE'}</div></div>
-        <div className="nx8-metric"><div className="nx8-metric-label">{wa?'未処理':'Queue'}</div><div className="nx8-metric-value">{String(queueCount).padStart(2,'0')}</div></div>
+        <button
+          type="button"
+          className="nx8-metric nx12-metric-button"
+          onClick={()=>setShowQueueDetail(true)}
+          aria-label={wa ? `未処理${queueCount}件の内容を確認` : `Open ${queueCount} queue items`}>
+          <div className="nx8-metric-label">{wa?'未処理':'Queue'}</div>
+          <div className="nx8-metric-value">{String(queueCount).padStart(2,'0')}</div>
+        </button>
         <div className="nx8-metric"><div className="nx8-metric-label">{wa?'予定':'Timeline'}</div><div className="nx8-metric-value">{wa?'本日':'TODAY'}</div></div>
         <div className="nx8-metric"><div className="nx8-metric-label">{wa?'状態':'Signal'}</div><div className="nx8-metric-value">{wa?(queueCount>0?'要確認':'平常'):(queueCount>0?'ACTIVE':'CLEAR')}</div></div>
       </div>
@@ -2944,6 +3235,15 @@ function HomeScreen() {
       </div>
 
       {showForge && <SkillForge skills={skills} onClose={()=>setShowForge(false)} />}
+      {showQueueDetail && (
+        <QueueDetailModal
+          data={staffFollow}
+          uiMode={uiMode}
+          onClose={()=>setShowQueueDetail(false)}
+          onOpenStaff={(staff)=>nav('staffDetail',{id:staff.id})}
+          onOpenCalendar={()=>nav('calendar')}
+        />
+      )}
     </div>
   );
 }
