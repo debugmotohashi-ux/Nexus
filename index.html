@@ -6562,6 +6562,8 @@ const ECHO_FORMATS = {
 
 function EchoScreen() {
   const { sb, user, store, fetchTable } = useApp();
+  const DRAFT_KEY = 'nexus_oracle_drafts_v2';
+  const PROMPT_KEY = 'nexus_oracle_prompts_v2';
   const [fmt, setFmt] = useState('interview');
   const [transcript, setTranscript] = useState('');
   const [minutes, setMinutes] = useState('');
@@ -6573,10 +6575,23 @@ function EchoScreen() {
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [lineCopied, setLineCopied] = useState(false);
+  const [lineConfirm, setLineConfirm] = useState(false);
+  const [revision, setRevision] = useState('');
+  const [drafts, setDrafts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || '[]'); } catch(e) { return []; }
+  });
+  const [activeId, setActiveId] = useState('');
+  const [showDrafts, setShowDrafts] = useState(true);
+  const [promptOverrides, setPromptOverrides] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(PROMPT_KEY) || '{}'); } catch(e) { return {}; }
+  });
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
+  const [promptEdit, setPromptEdit] = useState('');
 
-  const def = ECHO_FORMATS[fmt];
+  const baseDef = ECHO_FORMATS[fmt];
+  const def = { ...baseDef, prompt: promptOverrides[fmt] || baseDef.prompt };
 
-  // 名前照合（敬称・空白除去 → 完全一致 → 部分一致）
   const resolveStaff = (raw) => {
     if (!raw) return null;
     const name = String(raw).replace(/さん|くん|君|氏|様/g,'').replace(/[\s　]+/g,'').trim();
@@ -6587,7 +6602,6 @@ function EchoScreen() {
     return hit || null;
   };
 
-  // 日付正規化（2026-07-03 / 2026/7/3 / 7月3日(金) → ISO）
   const normalizeDate = (raw) => {
     if (!raw) return '';
     let m = String(raw).match(/(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/);
@@ -6603,7 +6617,6 @@ function EchoScreen() {
     return '';
   };
 
-  // 完成文から対象者・実施日を抽出（面談=同一行 / 教育=次行 両対応）
   const extract = (text) => {
     let name = '';
     const m1 = text.match(/対象者[:：]\s*(.+)/);
@@ -6626,7 +6639,20 @@ function EchoScreen() {
     return { name, date: normalizeDate(dateRaw) };
   };
 
-  // 完成文の貼り付けで自動抽出→チップに反映
+  const calcStatus = () => {
+    if (done) return 'completed';
+    if (lineConfirm) return 'lineworks_opened';
+    if (lineCopied) return 'lineworks_opened';
+    if (finalText.trim()) return 'result_received';
+    if (copied) return 'sent_to_chatgpt';
+    if (transcript.trim() || minutes.trim()) return 'draft';
+    return 'draft';
+  };
+  const statusLabel = (s) => ({
+    draft:'入力途中', ready_to_send:'ChatGPT送信準備完了', sent_to_chatgpt:'完成文貼り付け待ち',
+    result_received:'LINE WORKS報告待ち', lineworks_opened:'報告確認待ち', knowledge_pending:'ナレッジ保存待ち', completed:'完了'
+  }[s] || '入力途中');
+
   useEffect(() => {
     const t = finalText.trim();
     if (!t) { setPickStaff(''); setPickDate(''); setAutoName(''); return; }
@@ -6637,32 +6663,107 @@ function EchoScreen() {
     setPickDate(ex.date || localIso().slice(0,10));
   }, [finalText]);
 
-  // ChatGPTへ（コピー→アプリ直接起動。アプリが無い時だけWeb版へフォールバック）
-  const toChatGPT = async () => {
-    const t = transcript.trim();
-    if (!t) return;
-    let payload = def.prompt + t;
-    if (minutes.trim()) {
-      payload += '\n\n【手打ち議事録（この内容も統合し、文字起こしに不足している部分を補い、重複する部分は精査して一本化してください）】\n\n' + minutes.trim();
-    }
-    try { await navigator.clipboard.writeText(payload); setCopied(true); setTimeout(()=>setCopied(false),2500); } catch(e){}
-    // アプリ内ブラウザを経由せず ChatGPT アプリを直接起動（白画面が残る問題の対策）
+  useEffect(() => {
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts)); } catch(e) {}
+  }, [drafts]);
+  useEffect(() => {
+    try { localStorage.setItem(PROMPT_KEY, JSON.stringify(promptOverrides)); } catch(e) {}
+  }, [promptOverrides]);
+
+  useEffect(() => {
+    const hasContent = transcript.trim() || minutes.trim() || finalText.trim() || revision.trim();
+    if (!hasContent && !activeId) return;
+    const timer = setTimeout(() => {
+      const now = new Date().toISOString();
+      const id = activeId || ('oracle_' + Date.now());
+      if (!activeId) setActiveId(id);
+      const staffObj = (store.staff||[]).find(s=>s.id===pickStaff);
+      const row = {
+        id, fmt, transcript, minutes, showMinutes, finalText, pickStaff, pickDate, autoName, revision,
+        status: calcStatus(), updatedAt: now, createdAt: (drafts.find(d=>d.id===id)||{}).createdAt || now,
+        title: (staffObj?staffObj.name:(autoName||'対象未設定')) + '｜' + baseDef.label.replace(/^[^ ]+ /,''),
+        promptVersion: promptOverrides[fmt] ? 'カスタム' : '標準'
+      };
+      setDrafts(prev => [row, ...prev.filter(d=>d.id!==id)].slice(0,50));
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [fmt, transcript, minutes, showMinutes, finalText, pickStaff, pickDate, autoName, revision, copied, lineCopied, lineConfirm, done]);
+
+  const loadDraft = (d) => {
+    setActiveId(d.id); setFmt(d.fmt||'interview'); setTranscript(d.transcript||''); setMinutes(d.minutes||'');
+    setShowMinutes(!!d.showMinutes || !!d.minutes); setFinalText(d.finalText||''); setPickStaff(d.pickStaff||'');
+    setPickDate(d.pickDate||''); setAutoName(d.autoName||''); setRevision(d.revision||'');
+    setCopied(['sent_to_chatgpt','result_received','lineworks_opened','knowledge_pending','completed'].includes(d.status));
+    setLineCopied(['lineworks_opened','knowledge_pending','completed'].includes(d.status));
+    setLineConfirm(false); setDone(d.status==='completed'); setShowDrafts(false);
+  };
+
+  const newDraft = () => {
+    setActiveId(''); setFmt('interview'); setTranscript(''); setMinutes(''); setShowMinutes(false); setFinalText('');
+    setPickStaff(''); setPickDate(''); setAutoName(''); setRevision(''); setCopied(false); setLineCopied(false);
+    setLineConfirm(false); setDone(false); setShowDrafts(false);
+  };
+
+  const deleteDraft = (id) => {
+    if (!confirm('この下書きを削除しますか？')) return;
+    setDrafts(prev=>prev.filter(d=>d.id!==id));
+    if (activeId===id) newDraft();
+  };
+
+  const buildChatPayload = () => {
+    let payload = def.prompt + transcript.trim();
+    if (minutes.trim()) payload += '\n\n【手打ち議事録（文字起こしと統合し、不足を補い、重複は精査して一本化してください）】\n\n' + minutes.trim();
+    return payload;
+  };
+
+  const openExternalApp = (appUrl, fallbackUrl) => {
     let appOpened = false;
     const onHide = () => { if (document.visibilityState === 'hidden') appOpened = true; };
     document.addEventListener('visibilitychange', onHide);
-    window.location.href = 'chatgpt://';
+    window.location.href = appUrl;
     setTimeout(() => {
       document.removeEventListener('visibilitychange', onHide);
-      if (!appOpened) {
-        const q = payload.length < 1500 ? ('?q=' + encodeURIComponent(payload)) : '';
-        const url = 'https://chat.openai.com/' + q;
-        const w = window.open(url, '_blank');
-        if (!w) window.location.href = url;
+      if (!appOpened && fallbackUrl) {
+        const w = window.open(fallbackUrl, '_blank');
+        if (!w) window.location.href = fallbackUrl;
       }
-    }, 1200);
+    }, 1300);
   };
 
-  // ナレッジ保存＋最終日更新
+  const toChatGPT = async () => {
+    const payload = buildChatPayload();
+    if (!transcript.trim() && !minutes.trim()) return;
+    try { await navigator.clipboard.writeText(payload); setCopied(true); setTimeout(()=>setCopied(false),2500); } catch(e){}
+    const q = payload.length < 1500 ? ('?q=' + encodeURIComponent(payload)) : '';
+    openExternalApp('chatgpt://', 'https://chat.openai.com/' + q);
+  };
+
+  const copyRevision = async () => {
+    if (!finalText.trim() || !revision.trim()) return;
+    const payload = '以下の共有文を、修正指示に従って修正してください。完成文のみ出力してください。\n\n【現在の共有文】\n' + finalText.trim() + '\n\n【修正指示】\n' + revision.trim();
+    try { await navigator.clipboard.writeText(payload); setCopied(true); setTimeout(()=>setCopied(false),2500); } catch(e){}
+    const q = payload.length < 1500 ? ('?q=' + encodeURIComponent(payload)) : '';
+    openExternalApp('chatgpt://', 'https://chat.openai.com/' + q);
+  };
+
+  const copyAndOpenLineWorks = async () => {
+    const text = finalText.trim();
+    if (!text) return;
+    try { await navigator.clipboard.writeText(text); } catch(e) {}
+    setLineCopied(true);
+    setLineConfirm(false);
+    const link = 'https://line.worksmobile.com/message/send?version=28&message=' + encodeURIComponent(text) + '&callbackMainYn=Y';
+    const onReturn = () => {
+      if (document.visibilityState === 'visible') {
+        setTimeout(()=>setLineConfirm(true), 350);
+        document.removeEventListener('visibilitychange', onReturn);
+      }
+    };
+    document.addEventListener('visibilitychange', onReturn);
+    window.location.href = link;
+    setTimeout(()=>setLineConfirm(true), 1800);
+  };
+
   const save = async () => {
     const t = finalText.trim();
     if (!t || saving) return;
@@ -6673,129 +6774,156 @@ function EchoScreen() {
       const dateIso = pickDate || localIso().slice(0,10);
       const labelPlain = def.label.replace(/^[^ ]+ /,'');
       const title = (cat==='interview'?'面談共有：':cat==='education'?'教育共有：':'共有：') + (staffObj?staffObj.name:(autoName||labelPlain)) + '（'+dateIso+'）';
-      // 既存の抽出ロジック互換のため実施日メタを付加
       const contentVal = t + '\n\n─────────────────\n■ 実施日\n' + dateIso + '\n■ 誰に\n' + (staffObj?staffObj.name:(autoName||'')) + '\nSource: Oracle';
-      const row = {
-        user_id: user.id, title, category: cat,
-        content: contentVal,
-        tags: ['echo', cat],
-        source_ref: 'Oracle',
-      };
+      const row = { user_id: user.id, title, category: cat, content: contentVal, tags: ['oracle', cat], source_ref: 'Oracle' };
       if (staffObj) row.staff_id = staffObj.id;
       await sb.from('knowledge_items').insert(row);
-      // 最終教育日・最終面談日の更新（新しい場合のみ・巻き戻し防止）
       if (staffObj && (cat==='education' || cat==='interview')) {
         const field = cat==='education' ? 'last_education_at' : 'last_interview_at';
         const prev = staffObj[field] || null;
-        if (!prev || dateIso >= prev) {
-          await sb.from('staff_profiles').update({ [field]: dateIso }).eq('id', staffObj.id).eq('user_id', user.id);
-        }
+        if (!prev || dateIso >= prev) await sb.from('staff_profiles').update({ [field]: dateIso }).eq('id', staffObj.id).eq('user_id', user.id);
       }
-      await fetchTable('knowledge');
-      await fetchTable('staff');
+      await fetchTable('knowledge'); await fetchTable('staff');
       setDone(true);
+      if (activeId) setDrafts(prev=>prev.map(d=>d.id===activeId?{...d,status:'completed',updatedAt:new Date().toISOString()}:d));
     } catch(e) { alert('保存に失敗しました：' + (e.message||e)); }
     setSaving(false);
   };
 
-  const resetAll = () => { setTranscript(''); setMinutes(''); setShowMinutes(false); setFinalText(''); setPickStaff(''); setPickDate(''); setAutoName(''); setDone(false); };
+  const openPromptEditor = () => { setPromptEdit(def.prompt); setShowPromptEditor(true); };
+  const savePrompt = () => {
+    if (!promptEdit.trim()) return;
+    setPromptOverrides(prev=>({...prev,[fmt]:promptEdit}));
+    setShowPromptEditor(false);
+  };
+  const resetPrompt = () => {
+    if (!confirm('この種別のプロンプトを標準に戻しますか？')) return;
+    setPromptOverrides(prev=>{ const n={...prev}; delete n[fmt]; return n; });
+    setPromptEdit(baseDef.prompt); setShowPromptEditor(false);
+  };
 
-  const taCls = 'w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-indigo-400 focus:outline-none';
+  const resetAll = () => { newDraft(); };
+  const taCls = 'w-full rounded-xl border border-slate-500/20 bg-slate-950/60 p-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-sky-400/50 focus:outline-none';
   const needsStaff = fmt !== 'other';
+  const incomplete = drafts.filter(d=>d.status!=='completed');
 
   if (done) {
     return (
       <>
-        <PageHeader title="Oracle" subtitle="Transcript → Report → Knowledge"/>
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center space-y-3">
+        <PageHeader title="Oracle" subtitle="共有・報告・保存を完了" action={<Btn size="sm" variant="outline" onClick={()=>setShowDrafts(true)}>未処理 {incomplete.length}</Btn>}/>
+        <div className="rounded-2xl border border-emerald-400/25 bg-emerald-400/10 p-6 text-center space-y-3">
           <div className="text-3xl">✅</div>
-          <div className="text-sm font-semibold text-emerald-700">ナレッジにSaved</div>
-          {pickStaff && needsStaff && <div className="text-xs text-emerald-600">スタッフに紐づけ、実施日も更新済みです</div>}
-          <Btn onClick={resetAll}>Continue</Btn>
+          <div className="text-sm font-semibold text-emerald-300">共有をナレッジへ保存しました</div>
+          {pickStaff && needsStaff && <div className="text-xs text-emerald-400">スタッフ履歴と実施日も更新済みです</div>}
+          <Btn onClick={resetAll}>次の共有を作成</Btn>
         </div>
+      </>
+    );
+  }
+
+  if (showDrafts) {
+    return (
+      <>
+        <PageHeader title="Oracle" subtitle="ChatGPT Bridge / Draft Control" action={<Btn size="sm" onClick={newDraft}>＋ 新規作成</Btn>}/>
+        <div className="mb-4 rounded-2xl border border-sky-400/20 bg-sky-400/10 p-4">
+          <div className="flex items-center justify-between">
+            <div><div className="text-sm font-semibold text-sky-100">未処理 {incomplete.length}件</div><div className="mt-1 text-xs text-slate-400">作業途中でも自動保存され、ここから再開できます</div></div>
+          </div>
+        </div>
+        <div className="space-y-2.5">
+          {incomplete.length===0 && <div className="rounded-2xl border border-slate-500/15 bg-slate-950/40 p-7 text-center text-sm text-slate-500">未処理の共有はありません</div>}
+          {incomplete.map(d=>(
+            <div key={d.id} className="rounded-2xl border border-slate-500/15 bg-slate-950/55 p-4">
+              <button className="w-full text-left" onClick={()=>loadDraft(d)}>
+                <div className="flex items-start justify-between gap-3"><div><div className="text-sm font-semibold text-slate-100">{d.title}</div><div className="mt-1 text-xs text-sky-300">{statusLabel(d.status)}</div></div><span className="text-slate-500">›</span></div>
+                <div className="mt-2 text-[11px] text-slate-500">最終更新：{new Date(d.updatedAt).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})} ／ {d.promptVersion}</div>
+              </button>
+              <button onClick={()=>deleteDraft(d.id)} className="mt-3 text-[11px] text-rose-400">削除</button>
+            </div>
+          ))}
+        </div>
+        {drafts.some(d=>d.status==='completed') && <button onClick={()=>setDrafts(prev=>prev.filter(d=>d.status!=='completed'))} className="mt-5 w-full text-center text-xs text-slate-500">完了済み履歴を整理</button>}
       </>
     );
   }
 
   return (
     <>
-      <PageHeader title="Oracle" subtitle="Transcript → Report → Knowledge"/>
+      <PageHeader title="Oracle" subtitle="Transcript → ChatGPT → LINE WORKS → Knowledge" action={<Btn size="sm" variant="outline" onClick={()=>setShowDrafts(true)}>未処理 {incomplete.length}</Btn>}/>
 
-      {/* ① 種別 */}
+      <div className="mb-4 rounded-xl border border-slate-500/15 bg-slate-950/45 px-3 py-2 text-[11px] text-slate-500">入力内容は自動保存されます</div>
+
       <div className="mb-4">
-        <div className="text-xs font-semibold text-slate-500 mb-2">① 種別を選ぶ</div>
+        <div className="text-xs font-semibold text-slate-400 mb-2">① 共有種別</div>
         <div className="grid grid-cols-3 gap-2">
           {Object.entries(ECHO_FORMATS).map(([k,v])=>(
-            <button key={k} onClick={()=>setFmt(k)}
-              className={cn('rounded-xl border px-2 py-2.5 text-xs font-medium transition-colors',
-                fmt===k?'border-sky-300/30 bg-sky-400/15 text-sky-100':'border-slate-500/15 bg-slate-950/50 text-slate-400')}>
-              {v.label}
-            </button>
+            <button key={k} onClick={()=>setFmt(k)} className={cn('rounded-xl border px-2 py-2.5 text-xs font-medium transition-colors', fmt===k?'border-sky-300/30 bg-sky-400/15 text-sky-100':'border-slate-500/15 bg-slate-950/50 text-slate-400')}>{v.label}</button>
           ))}
+        </div>
+        <div className="mt-2 flex items-center justify-between rounded-xl border border-slate-500/15 bg-slate-950/40 px-3 py-2">
+          <div><div className="text-xs text-slate-300">使用プロンプト：{promptOverrides[fmt]?'カスタム':'標準'}</div><div className="text-[10px] text-slate-600">この種別だけ差し替え可能</div></div>
+          <button onClick={openPromptEditor} className="text-xs text-sky-300">編集</button>
         </div>
       </div>
 
-      {/* ② 文字起こし */}
       <div className="mb-4">
-        <div className="text-xs font-semibold text-slate-500 mb-2">② 文字起こしを貼り付け</div>
-        <textarea value={transcript} onChange={e=>setTranscript(e.target.value)} rows={7}
-          placeholder="ボイスメモ / レコーダーの文字起こしをここに貼り付け" className={taCls}/>
-        <button onClick={()=>setShowMinutes(v=>!v)} className="mt-2 text-xs text-indigo-500">
-          {showMinutes ? '－ 手打ち議事録をClose' : '＋ 手打ち議事録がある場合はこちら'}
-        </button>
-        {showMinutes && (
-          <textarea value={minutes} onChange={e=>setMinutes(e.target.value)} rows={5}
-            placeholder="手打ちの議事録を貼り付け（文字起こしと統合・精査されます）" className={cn(taCls,'mt-2')}/>
-        )}
+        <div className="text-xs font-semibold text-slate-400 mb-2">② 文字起こし・議事録</div>
+        <textarea value={transcript} onChange={e=>setTranscript(e.target.value)} rows={7} placeholder="ボイスメモの文字起こしを貼り付け" className={taCls}/>
+        <button onClick={()=>setShowMinutes(v=>!v)} className="mt-2 text-xs text-sky-400">{showMinutes ? '－ 手入力議事録を閉じる' : '＋ 手入力議事録も追加'}</button>
+        {showMinutes && <textarea value={minutes} onChange={e=>setMinutes(e.target.value)} rows={5} placeholder="手入力の議事録・補足メモ" className={cn(taCls,'mt-2')}/>} 
       </div>
 
-      {/* ③ ChatGPTへ */}
       <div className="mb-6">
-        <Btn className="w-full" onClick={toChatGPT} disabled={!transcript.trim()}>
-          🚀 ChatGPTへ（プロンプト付きでコピー＆起動）
-        </Btn>
-        {copied && <div className="mt-1.5 text-center text-xs text-emerald-600">コピーしました。開いた画面に貼り付けてください</div>}
-        <div className="mt-1 text-center text-[10px] text-slate-400">短文は自動入力／長文はコピー済みの状態で開きます</div>
+        <Btn className="w-full" onClick={toChatGPT} disabled={!transcript.trim()&&!minutes.trim()}>🚀 ChatGPT用にコピーして開く</Btn>
+        {copied && <div className="mt-1.5 text-center text-xs text-emerald-400">コピーしました。ChatGPTに貼り付けてください</div>}
       </div>
 
-      {/* ④ 完成文→保存 */}
       <div className="mb-4">
-        <div className="text-xs font-semibold text-slate-500 mb-2">③ 完成した共有文を貼り付け</div>
-        <textarea value={finalText} onChange={e=>setFinalText(e.target.value)} rows={8}
-          placeholder="ChatGPTの出力をここに貼り付けると、対象スタッフと実施日を自動で読み取ります" className={taCls}/>
+        <div className="text-xs font-semibold text-slate-400 mb-2">③ 完成した共有文</div>
+        <textarea value={finalText} onChange={e=>setFinalText(e.target.value)} rows={10} placeholder="ChatGPTで完成した共有文を貼り付け" className={taCls}/>
       </div>
 
       {finalText.trim() && (
-        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2.5">
-          <div className="text-xs font-semibold text-slate-500">読み取り結果（タップで修正できます）</div>
-          {needsStaff && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 w-14 shrink-0">対象</span>
-              <select value={pickStaff} onChange={e=>setPickStaff(e.target.value)}
-                className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm">
-                <option value="">（未選択）</option>
-                {(store.staff||[]).filter(s=>s.is_active!==false).map(s=>(
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
+        <>
+          <div className="mb-4 rounded-xl border border-slate-500/15 bg-slate-950/45 p-3 space-y-2.5">
+            <div className="text-xs font-semibold text-slate-400">読み取り結果</div>
+            {needsStaff && <div className="flex items-center gap-2"><span className="text-xs text-slate-500 w-14 shrink-0">対象</span><select value={pickStaff} onChange={e=>setPickStaff(e.target.value)} className="flex-1 rounded-lg border border-slate-500/20 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"><option value="">（未選択）</option>{(store.staff||[]).filter(s=>s.is_active!==false).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
+            <div className="flex items-center gap-2"><span className="text-xs text-slate-500 w-14 shrink-0">実施日</span><input type="date" value={pickDate} onChange={e=>setPickDate(e.target.value)} className="flex-1 rounded-lg border border-slate-500/20 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"/></div>
+          </div>
+
+          <div className="mb-4 rounded-xl border border-slate-500/15 bg-slate-950/45 p-3">
+            <div className="mb-2 text-xs font-semibold text-slate-400">ChatGPTへ再修正を依頼</div>
+            <textarea value={revision} onChange={e=>setRevision(e.target.value)} rows={3} placeholder="例：内容を削らず、言葉を変えすぎずに整理" className={taCls}/>
+            <Btn className="mt-2 w-full" variant="outline" onClick={copyRevision} disabled={!revision.trim()}>修正依頼をコピーしてChatGPTを開く</Btn>
+          </div>
+
+          <div className="mb-4 rounded-2xl border border-sky-400/20 bg-sky-400/10 p-4 space-y-3">
+            <div><div className="text-sm font-semibold text-sky-100">④ LINE WORKSへ報告</div><div className="mt-1 text-xs text-slate-400">共有文をコピーし、LINE WORKSのトーク画面を開きます</div></div>
+            <Btn className="w-full" onClick={copyAndOpenLineWorks}>LINE WORKS用にコピーして開く</Btn>
+            {lineCopied && <div className="text-center text-xs text-emerald-400">コピー済みです。送信先を選び、貼り付け・送信してください</div>}
+          </div>
+
+          {(lineConfirm || lineCopied) && (
+            <div className="mb-4 rounded-xl border border-amber-400/20 bg-amber-400/10 p-4">
+              <div className="text-sm font-semibold text-amber-100">LINE WORKSへの報告は完了しましたか？</div>
+              <div className="mt-3 grid grid-cols-2 gap-2"><Btn variant="outline" onClick={()=>setLineConfirm(false)}>まだ報告していない</Btn><Btn onClick={()=>setLineConfirm(true)}>報告済み</Btn></div>
             </div>
           )}
-          {needsStaff && !pickStaff && (
-            <div className="text-[11px] text-amber-600">⚠ スタッフ未選択のまま保存すると紐づけ・実施日更新はされません{autoName?('（読み取り名：'+autoName+'）'):''}</div>
-          )}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 w-14 shrink-0">実施日</span>
-            <input type="date" value={pickDate} onChange={e=>setPickDate(e.target.value)}
-              className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"/>
-          </div>
-          <Btn className="w-full" onClick={save} disabled={saving}>
-            {saving ? 'Saving…' : '💾 ナレッジとして保存'}
-          </Btn>
-        </div>
+
+          <Btn className="w-full" onClick={save} disabled={saving || !lineConfirm}>{saving ? '保存中…' : '⑤ 共有履歴・ナレッジへ保存して完了'}</Btn>
+          {!lineConfirm && <div className="mt-2 text-center text-[11px] text-slate-500">LINE WORKS報告済みを確認すると保存できます</div>}
+        </>
+      )}
+
+      {showPromptEditor && (
+        <FullModal title={baseDef.label.replace(/^[^ ]+ /,'')+' プロンプト編集'} onClose={()=>setShowPromptEditor(false)} onSave={savePrompt} saveLabel="差し替える">
+          <div className="space-y-3"><p className="text-xs leading-relaxed text-slate-500">ここで変更した内容が、次回からChatGPTへ渡すプロンプトとして使われます。</p><textarea value={promptEdit} onChange={e=>setPromptEdit(e.target.value)} rows={18} className={taCls}/><Btn variant="outline" className="w-full" onClick={resetPrompt}>標準プロンプトに戻す</Btn></div>
+        </FullModal>
       )}
     </>
   );
 }
+
 
 // ─── INPUT HUB（Gateway・全入力を統合）──────────────────
 const HUB_TYPES = {
